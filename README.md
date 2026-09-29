@@ -11,7 +11,7 @@ The app has five areas:
 - **Dashboard.** Six modules, points, level, accuracy, best Gauss score. Modules can be locked and unlocked.
 - **Self Learning.** Short lessons with diagrams and worked examples for 29 topics. Students mark topics as mastered.
 - **Practice Generator.** Unlimited fresh worksheets in three tiers: Tier 1 BC Core, Tier 2 WVSS Enriched, Tier 3 Gauss style. Each question gives instant feedback, a step by step solution and a scratchpad for typing or drawing.
-- **Gauss Simulator.** A full 25 question contest with a 60 minute countdown. Part A has 10 easy questions at 5 points, Part B has 10 medium questions at 6 points, Part C has 5 hard non routine questions at 8 points. The total is 150 points. A question grid tracks answered and flagged questions. The results screen shows a score breakdown by part and module, coaching tips and full solutions.
+- **Gauss Simulator.** A full 25 question contest with a 60 minute countdown. Part A has 10 easy questions at 5 points, Part B has 10 medium questions at 6 points, Part C has 5 hard non routine questions at 8 points. The total is 150 points. A question grid tracks answered and flagged questions. A built in basic calculator (no memory, no programs, like the real contest rules) can be turned on or off before starting. A Quit contest button discards an attempt without saving it. There is no pause, because the real contest has none. The results screen shows a score breakdown by part and module, coaching tips and full solutions.
 - **Student Progress.** Mastery bars, contest history, feedback history, backup and restore, reset.
 
 The six modules are Advanced Number Sense, Proportional Reasoning and Percentages, Algebraic Foundations, Geometry and Measurement, Data and Probability, and Non Routine Logic.
@@ -71,4 +71,4 @@ Page addresses use the hash, for example `#/learn/m1t0` opens Module 1, topic 0.
 - Progress key in localStorage: `enrichedMath8.v1`. A running contest is stored in `enrichedMath8.gaussSession.v1`, so a refresh does not lose it.
 - To add a topic, register it with `MathEngine.registerModule` in one of the module scripts. It appears in Self Learning and Practice with no other change.
 - To check every question generator, open the browser console and run `MathEngine.selfTest(20)`. To check the simulator, run `GaussSimulator.selfTest(10)`. Both should report zero failures.
-- The Feedback button saves notes in the browser and can open a prefilled issue at https://github.com/ferrariboy/enriched-math8/issues.
+- The Feedback button saves notes in the browser only (`feedback` inside the `enrichedMath8.v1` key). Nothing is sent anywhere and no email is produced. The Open GitHub issue button in the panel opens a prefilled issue at https://github.com/ferrariboy/enriched-math8/issues/new. That is the only way feedback reaches the repository owner, and it needs a GitHub account.

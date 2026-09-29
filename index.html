@@ -4121,6 +4121,18 @@ body{margin:0;background:var(--bg)}
     '.gs-time{font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;font-weight:800;font-size:clamp(2.4rem,8vw,3.6rem);line-height:1;color:var(--accent,#2450E0)}',
     '.gs-timer.gs-warn .gs-time{color:var(--warn,#8A5A00)}.gs-timer.gs-danger .gs-time{color:#C0281B}',
     '.gs-timer.gs-danger{animation:gsPulse 1.2s ease-in-out infinite}@keyframes gsPulse{50%{opacity:.6}}@media (prefers-reduced-motion:reduce){.gs-timer.gs-danger{animation:none}}',
+    '.gs-tools{display:flex;gap:8px;flex-wrap:wrap}.gs-btn.gs-small{min-height:44px;padding:6px 14px;font-size:.95rem}',
+    '.gs-quit{margin-top:14px;width:100%}.gs-btn.gs-danger{border-color:#C0281B;color:#C0281B}',
+    '.gs-calc{position:fixed;right:16px;bottom:16px;width:min(320px,calc(100vw - 32px));z-index:45;background:var(--surface,#fff);color:var(--ink,#14213D);border:2px solid var(--line,#D6CEB8);border-radius:18px;padding:12px;box-shadow:0 12px 32px rgba(0,0,0,.28)}',
+    '@media (max-width:860px){.gs-calc{bottom:calc(88px + env(safe-area-inset-bottom,0px))}}',
+    '.gs-calchead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;font-weight:800}',
+    '.gs-calcscreen{background:var(--surface2,#EEE7D6);border-radius:12px;padding:8px 12px;text-align:right;min-height:74px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}',
+    '.gs-calcexpr{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:1rem;color:var(--muted,#4B5872);min-height:1.4em;overflow-wrap:anywhere}',
+    '.gs-calcres{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:1.7rem;font-weight:700;overflow-x:auto;white-space:nowrap}',
+    '.gs-calckeys{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}',
+    '.gs-calckeys button{min-height:50px;border-radius:12px;border:2px solid var(--line,#D6CEB8);background:var(--surface,#fff);color:var(--ink,#14213D);font:inherit;font-size:1.2rem;font-weight:700;cursor:pointer;touch-action:manipulation}',
+    '.gs-calckeys button.op{background:var(--surface2,#EEE7D6)}.gs-calckeys button.eq{background:var(--accent,#2450E0);border-color:var(--accent,#2450E0);color:var(--accent-ink,#fff)}',
+    '.gs-calckeys button:focus-visible{outline:3px solid var(--accent,#2450E0);outline-offset:2px}',
     '.gs-prog{font-weight:700}.gs-prog small{font-weight:500;color:var(--muted,#4B5872)}',
     '.gs-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;align-items:start}',
     '@media (max-width:900px){.gs-layout{grid-template-columns:1fr}.gs-grid-col{order:2}}',
@@ -4134,6 +4146,7 @@ body{margin:0;background:var(--bg)}
     '.gs-opt .gs-let{flex:0 0 auto;width:38px;height:38px;border-radius:10px;background:var(--surface2,#EEE7D6);display:flex;align-items:center;justify-content:center;font-weight:800}',
     '.gs-opt.gs-sel{border-color:var(--accent,#2450E0);background:var(--surface2,#EEE7D6)}.gs-opt.gs-sel .gs-let{background:var(--accent,#2450E0);color:var(--accent-ink,#fff)}',
     '.gs-nav{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;margin-top:8px}',
+    '.gs-btn.gs-on{background:var(--accent,#2450E0);border-color:var(--accent,#2450E0);color:var(--accent-ink,#fff)}',
     '.gs-flagbtn.gs-on{background:var(--warn,#8A5A00);border-color:var(--warn,#8A5A00);color:#fff}',
     '.gs-partnote{background:var(--surface2,#EEE7D6);border-radius:12px;padding:8px 14px;margin-bottom:10px;font-weight:600}',
     '.gs-grid-col h3{font-size:1rem;margin:12px 0 6px}',
@@ -4189,11 +4202,56 @@ body{margin:0;background:var(--bg)}
     if (!container) throw new Error('GaussSimulator.mount: container not found');
     opts = opts || {}; injectGsCss();
     var appState = opts.appState || root.AppState, titles = moduleTitles();
-    var S = { phase: 'setup', test: null, answers: {}, flags: {}, cur: 1, deadline: 0, startedAt: 0, spent: {}, enteredAt: 0, result: null, modal: false, filter: 'all', warned: {}, saved: null, notice: '' };
+    var S = { phase: 'setup', test: null, answers: {}, flags: {}, cur: 1, deadline: 0, startedAt: 0, spent: {}, enteredAt: 0, result: null, modal: false, filter: 'all', warned: {}, saved: null, notice: '', calcOn: (function () { try { return root.localStorage.getItem('enrichedMath8.gaussCalc') !== '0'; } catch (x) { return true; } })(), calc: { open: false, expr: '', res: '0', ans: 0, done: false }, quit: false };
     var timer = null, toastTimer = null;
 
+    /* ---------- built in calculator: basic, not programmable, not graphing (like contest rules) ---------- */
+    function calcEval(str) {
+      var src = str.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-').replace(/\s+/g, ''), i = 0;
+      function peek() { return src.charAt(i); }
+      function num() { var m = /^(\d+\.?\d*|\.\d+)/.exec(src.slice(i)); if (!m) throw 0; i += m[0].length; return parseFloat(m[0]); }
+      function atom() {
+        var c = peek(), v;
+        if (c === '(') { i++; v = expr(); if (peek() === ')') i++; }
+        else if (c === '√') { i++; v = atom(); if (v < 0) throw 0; v = Math.sqrt(v); }
+        else if (c === 'A') { i++; v = S.calc.ans; }
+        else v = num();
+        while (peek() === '²') { i++; v = v * v; }
+        return v;
+      }
+      function power() { var b = atom(); if (peek() === '^') { i++; return Math.pow(b, unary()); } return b; }
+      function unary() { if (peek() === '-') { i++; return -unary(); } if (peek() === '+') { i++; return unary(); } return power(); }
+      function term() { var v = unary(); for (;;) { var c = peek(); if (c === '*') { i++; v *= unary(); } else if (c === '/') { i++; var d = unary(); if (d === 0) throw 0; v /= d; } else if (c === '(' || c === '√' || c === 'A') { v *= unary(); } else return v; } }
+      function expr() { var v = term(); for (;;) { var c = peek(); if (c === '+') { i++; v += term(); } else if (c === '-') { i++; v -= term(); } else return v; } }
+      var out = expr(); if (i < src.length) { if (src.charAt(i) === ')') { /* ignore stray close bracket */ } else throw 0; } if (!isFinite(out)) throw 0; return out;
+    }
+    function calcFmt(v) { if (Math.abs(v) >= 1e15 || (Math.abs(v) < 1e-9 && v !== 0)) return v.toExponential(6); return String(parseFloat(v.toPrecision(12))); }
+    function calcShow() { var e = container.querySelector('#gs-calc-expr'), r = container.querySelector('#gs-calc-res'); if (e) e.textContent = S.calc.expr || '\u00A0'; if (r) r.textContent = S.calc.res; }
+    function calcPress(k) {
+      var c = S.calc;
+      if (k === 'C') { c.expr = ''; c.res = '0'; c.done = false; }
+      else if (k === 'back') { if (c.done) { c.expr = ''; c.res = '0'; c.done = false; } else c.expr = c.expr.slice(0, -1); }
+      else if (k === '=') {
+        if (!c.expr) return;
+        try { var v = calcEval(c.expr); c.res = calcFmt(v); c.ans = v; c.done = true; } catch (x) { c.res = 'Error'; c.done = true; }
+      } else {
+        if (c.done) { if (/^[+\-×÷^²]$/.test(k) && c.res !== 'Error') c.expr = 'A'; else c.expr = ''; c.done = false; c.res = '0'; }
+        c.expr += k;
+        try { c.res = c.expr ? calcFmt(calcEval(c.expr)) : '0'; } catch (x) { /* unfinished expression: keep previous result */ }
+      }
+      calcShow();
+    }
+    function calcHTML() {
+      if (!S.calcOn || !S.calc.open) return '';
+      var keys = [['C', 'op'], ['(', 'op'], [')', 'op'], ['back', 'op', '⌫'], ['7'], ['8'], ['9'], ['÷', 'op'], ['4'], ['5'], ['6'], ['×', 'op'], ['1'], ['2'], ['3'], ['−', 'op'], ['0'], ['.'], ['A', 'op', 'ANS'], ['+', 'op'], ['√', 'op'], ['²', 'op', 'x²'], ['^', 'op', 'xʸ'], ['=', 'eq']];
+      return '<div class="gs-calc" role="dialog" aria-label="Calculator"><div class="gs-calchead"><span>Calculator</span><button class="gs-btn gs-small" data-act="calcclose">Close</button></div>' +
+        '<div class="gs-calcscreen" aria-live="polite"><div class="gs-calcexpr" id="gs-calc-expr">' + esc(S.calc.expr || '\u00A0') + '</div><div class="gs-calcres" id="gs-calc-res">' + esc(S.calc.res) + '</div></div>' +
+        '<div class="gs-calckeys">' + keys.map(function (k) { return '<button class="' + (k[1] || '') + '" data-calc="' + esc(k[0]) + '" aria-label="' + esc(k[2] === '⌫' ? 'Backspace' : k[0] === 'C' ? 'Clear' : k[2] === 'ANS' ? 'Previous answer' : k[2] === 'x²' ? 'Square' : k[2] === 'xʸ' ? 'Power' : k[0] === '√' ? 'Square root' : k[0]) + '">' + esc(k[2] || k[0]) + '</button>'; }).join('') + '</div>' +
+        '<p class="gs-muted" style="margin:8px 0 0;font-size:.8em">Basic calculator. No memory, no programs, like the real contest rules.</p></div>';
+    }
+
     function history() { return (appState && appState.data && appState.data.gauss) ? appState.data.gauss : []; }
-    function persist() { if (S.phase === 'test') saveSession({ v: 1, test: describe(S.test), answers: S.answers, flags: S.flags, cur: S.cur, deadline: S.deadline, startedAt: S.startedAt, spent: S.spent }); }
+    function persist() { if (S.phase === 'test') saveSession({ v: 1, test: describe(S.test), answers: S.answers, flags: S.flags, cur: S.cur, deadline: S.deadline, startedAt: S.startedAt, spent: S.spent, calcOn: S.calcOn }); }
     function commitTime() { var now = Date.now(); if (S.phase === 'test' && S.enteredAt) S.spent[S.cur] = (S.spent[S.cur] || 0) + (now - S.enteredAt) / 1000; S.enteredAt = now; }
     function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
     function startTimer() { stopTimer(); timer = setInterval(tick, 250); tick(); }
@@ -4210,11 +4268,11 @@ body{margin:0;background:var(--bg)}
 
     /* ---------- actions ---------- */
     function start() {
-      S.test = assemble(); S.answers = {}; S.flags = {}; S.cur = 1; S.spent = {}; S.warned = {}; S.notice = ''; S.startedAt = Date.now(); S.deadline = S.startedAt + CONTEST_SECONDS * 1000; S.enteredAt = S.startedAt; S.phase = 'test'; S.modal = false;
+      S.test = assemble(); S.answers = {}; S.flags = {}; S.cur = 1; S.spent = {}; S.warned = {}; S.notice = ''; S.startedAt = Date.now(); S.deadline = S.startedAt + CONTEST_SECONDS * 1000; S.enteredAt = S.startedAt; S.phase = 'test'; S.modal = false; S.quit = false; S.calc = { open: false, expr: '', res: '0', ans: 0, done: false };
       persist(); render(); startTimer();
     }
     function resume(saved) {
-      S.test = rebuildTest(saved.test); S.answers = saved.answers || {}; S.flags = saved.flags || {}; S.cur = saved.cur || 1; S.spent = saved.spent || {}; S.startedAt = saved.startedAt; S.deadline = saved.deadline; S.enteredAt = Date.now(); S.warned = {}; S.phase = 'test'; S.modal = false;
+      S.test = rebuildTest(saved.test); S.answers = saved.answers || {}; S.flags = saved.flags || {}; S.cur = saved.cur || 1; S.spent = saved.spent || {}; S.startedAt = saved.startedAt; S.deadline = saved.deadline; S.calcOn = saved.calcOn !== false; S.enteredAt = Date.now(); S.warned = {}; S.phase = 'test'; S.modal = false;
       if (Date.now() >= S.deadline) { S.notice = 'Time ran out while you were away, so your contest was submitted automatically.'; finish(true); return; }
       render(); startTimer();
     }
@@ -4241,7 +4299,7 @@ body{margin:0;background:var(--bg)}
         '<div class="gs-rules"><div class="gs-rule"><b>25</b>questions</div><div class="gs-rule"><b>60 min</b>one countdown clock</div><div class="gs-rule"><b>Part A</b>10 easy questions, 5 points each</div><div class="gs-rule"><b>Part B</b>10 medium questions, 6 points each</div><div class="gs-rule"><b>Part C</b>5 hard non routine questions, 8 points each</div><div class="gs-rule"><b>150</b>points in total</div></div>' +
         '<ul class="gs-tips"><li>Each question has five choices, A to E. A wrong answer costs nothing, so never leave a blank.</li><li>Flag any question to come back to it. Use the number grid to jump around.</li><li>Your answers are saved as you go. If you close the page, the clock keeps running.</li><li>Solutions appear only after you submit.</li></ul>' +
         (S.notice ? '<p><b>' + esc(S.notice) + '</b></p>' : '') +
-        '<div class="gs-row" style="margin-top:14px"><button class="gs-btn gs-primary" data-act="start" style="font-size:1.15em;min-height:60px">Start the contest</button></div></section>' + resumeCard +
+        '<div class="gs-row" style="margin-top:14px"><button class="gs-btn' + (S.calcOn ? ' gs-on' : '') + '" data-act="calcpref" aria-pressed="' + S.calcOn + '">Calculator: ' + (S.calcOn ? 'on' : 'off') + '</button></div><p class="gs-muted" style="margin:6px 0 0;font-size:.9em">The real Gauss contest allows a basic, non programmable calculator. Turn it off for a no calculator drill.</p><div class="gs-row" style="margin-top:14px"><button class="gs-btn gs-primary" data-act="start" style="font-size:1.15em;min-height:60px">Start the contest</button></div></section>' + resumeCard +
         '<section class="gs-card"><h2>Your history</h2>' + (h.length ? '<p>Best score: <b>' + best + ' / ' + h[0].max + '</b></p><table class="gs-table"><thead><tr><th>Date</th><th>Score</th><th>Correct</th><th>Time</th></tr></thead><tbody>' + rows + '</tbody></table>' : '<p class="gs-muted">No contests yet. Your scores will be saved here.</p>') + '</section></div>';
     }
 
@@ -4257,13 +4315,17 @@ body{margin:0;background:var(--bg)}
       var opts2 = q.optionsHtml.map(function (o, i) { return '<button class="gs-opt' + (sel === i ? ' gs-sel' : '') + '" data-act="choose" data-i="' + i + '" aria-pressed="' + (sel === i) + '"><span class="gs-let">' + LET[i] + '</span><span>' + o + '</span></button>'; }).join('');
       var note = (S.cur === 1 || S.test.items[S.cur - 2].part !== it.part) ? '<div class="gs-partnote">' + part.label + ': ' + part.blurb + ' questions, ' + part.points + ' points each.</div>' : '';
       return '<div class="gs-root gs-test"><div class="gs-bar"><div class="gs-timer" id="gs-timer" role="timer" aria-label="Time remaining"><span class="gs-tlabel">Time left</span><span class="gs-time" id="gs-time">' + mmss((S.deadline - Date.now()) / 1000) + '</span></div>' +
-        '<div class="gs-prog"><b>' + answered + '</b> of 25 answered<br><small>' + flagged + ' flagged</small></div><button class="gs-btn gs-primary" data-act="submit">Submit contest</button></div>' +
+        '<div class="gs-prog"><b>' + answered + '</b> of 25 answered<br><small>' + flagged + ' flagged</small></div><div class="gs-tools">' + (S.calcOn ? '<button class="gs-btn gs-small' + (S.calc.open ? ' gs-on' : '') + '" data-act="calc" aria-pressed="' + S.calc.open + '">Calculator</button>' : '') + '<button class="gs-btn gs-primary gs-small" data-act="submit">Submit contest</button></div></div>' +
         '<div class="gs-layout"><main><section class="gs-card gs-qcard" style="margin-top:0">' + note + '<div class="gs-qhead"><h2 style="margin:0">Question ' + S.cur + ' of 25</h2><span class="gs-chip">' + part.label + '</span><span class="gs-chip gs-pts">' + it.points + ' points</span></div>' +
         '<div class="gs-qtext">' + q.questionHtml + '</div>' + q.visualHtml + '<div class="gs-opts" role="group" aria-label="Answer choices">' + opts2 + '</div>' +
         '<div class="gs-nav"><button class="gs-btn" data-act="prev"' + (S.cur === 1 ? ' disabled' : '') + '>Previous</button><button class="gs-btn gs-flagbtn' + (S.flags[S.cur] ? ' gs-on' : '') + '" data-act="flag" aria-pressed="' + !!S.flags[S.cur] + '">' + (S.flags[S.cur] ? 'Flagged for review' : 'Flag for review') + '</button>' + (sel !== undefined ? '<button class="gs-btn" data-act="clear">Clear answer</button>' : '') + '<button class="gs-btn gs-primary" data-act="next"' + (S.cur === TOTAL_QUESTIONS ? ' disabled' : '') + '>Next</button></div>' +
         '<p class="gs-muted" style="margin:12px 0 0;font-size:.85em">Keys: A to E choose, arrows move, F flags.</p></section></main>' +
-        '<aside class="gs-grid-col"><section class="gs-card" style="margin-top:0"><h2 style="font-size:1.1rem">Question grid</h2>' + grid + '<div class="gs-legend"><span><i class="a"></i>Answered</span><span><i></i>Not answered</span><span><i class="f"></i>Flagged</span></div></section></aside></div>' +
-        (S.modal ? submitModalHTML() : '') + '<div class="gs-toast" id="gs-toast" role="status" aria-live="polite"></div></div>';
+        '<aside class="gs-grid-col"><section class="gs-card" style="margin-top:0"><h2 style="font-size:1.1rem">Question grid</h2>' + grid + '<div class="gs-legend"><span><i class="a"></i>Answered</span><span><i></i>Not answered</span><span><i class="f"></i>Flagged</span></div><button class="gs-btn gs-danger gs-small gs-quit" data-act="quitask">Quit contest</button></section></aside></div>' +
+        (S.modal ? submitModalHTML() : '') + (S.quit ? quitModalHTML() : '') + calcHTML() + '<div class="gs-toast" id="gs-toast" role="status" aria-live="polite"></div></div>';
+    }
+    function quitModalHTML() {
+      return '<div class="gs-overlay" role="dialog" aria-modal="true" aria-labelledby="gs-qt"><div class="gs-modal"><h2 id="gs-qt">Quit without a score?</h2><p>The clock stops and your <b>' + Object.keys(S.answers).length + ' answers</b> are thrown away. This attempt is not saved to your history and the contest cannot be resumed.</p><p>If you only want to finish early, choose Submit contest instead. That scores what you have.</p>' +
+        '<div class="gs-row"><button class="gs-btn" data-act="quitcancel">Keep working</button><button class="gs-btn gs-danger" data-act="quitconfirm">Quit and discard</button></div></div></div>';
     }
     function submitModalHTML() {
       var blank = S.test.items.filter(function (i) { return S.answers[i.n] === undefined; }).map(function (i) { return i.n; }), fl = Object.keys(S.flags).map(Number).sort(function (a, b) { return a - b; });
@@ -4322,14 +4384,27 @@ body{margin:0;background:var(--bg)}
       else if (a === 'filter') { S.filter = t.getAttribute('data-f'); render(); }
       else if (a === 'jump') { S.filter = 'all'; render(); var el = container.querySelector('#gs-rev-' + t.getAttribute('data-n')); if (el) el.scrollIntoView({ block: 'start' }); e.preventDefault(); }
       else if (a === 'exit') exit();
+      else if (a === 'calc') { S.calc.open = !S.calc.open; render(); }
+      else if (a === 'calcclose') { S.calc.open = false; render(); }
+      else if (a === 'calcpref') { S.calcOn = !S.calcOn; try { root.localStorage.setItem('enrichedMath8.gaussCalc', S.calcOn ? '1' : '0'); } catch (x) { /* ignore */ } render(); }
+      else if (a === 'quitask') { commitTime(); S.quit = true; render(); }
+      else if (a === 'quitcancel') { S.quit = false; S.enteredAt = Date.now(); render(); }
+      else if (a === 'quitconfirm') { stopTimer(); clearSession(); S.quit = false; S.phase = 'setup'; S.test = null; S.notice = 'Contest discarded. Nothing was saved to your history.'; render(); }
     }
+    function onCalcClick(e) { var b = e.target.closest ? e.target.closest('[data-calc]') : null; if (!b || !container.contains(b)) return; calcPress(b.getAttribute('data-calc')); }
     function onKey(e) {
-      if (S.phase !== 'test' || S.modal) return; var tag = (e.target && e.target.tagName) || ''; if (/INPUT|TEXTAREA|SELECT/.test(tag) || e.ctrlKey || e.metaKey || e.altKey) return;
-      var k = e.key; if (/^[a-eA-E]$/.test(k)) { choose(LET.indexOf(k.toUpperCase())); e.preventDefault(); }
+      if (S.phase !== 'test' || S.modal || S.quit) return; var tag = (e.target && e.target.tagName) || ''; if (/INPUT|TEXTAREA|SELECT/.test(tag) || e.ctrlKey || e.metaKey || e.altKey) return;
+      var k = e.key;
+      if (S.calcOn && S.calc.open) {
+        var map = { '*': '×', '/': '÷', '-': '−' }, ck = null;
+        if (/^[0-9.+()^]$/.test(k)) ck = k; else if (map[k]) ck = map[k]; else if (k === 'Backspace') ck = 'back'; else if ((k === '=' || k === 'Enter') && tag !== 'BUTTON') ck = '=';
+        if (ck) { calcPress(ck); e.preventDefault(); return; }
+      }
+      if (/^[a-eA-E]$/.test(k)) { choose(LET.indexOf(k.toUpperCase())); e.preventDefault(); }
       else if (k === 'ArrowRight') { go(S.cur + 1); e.preventDefault(); } else if (k === 'ArrowLeft') { go(S.cur - 1); e.preventDefault(); }
       else if (k === 'f' || k === 'F') { toggleFlag(); e.preventDefault(); }
     }
-    container.addEventListener('click', onClick);
+    container.addEventListener('click', onClick); container.addEventListener('click', onCalcClick);
     document.addEventListener('keydown', onKey);
 
     // If a saved contest has already run out of time, grade it straight away.
@@ -4337,7 +4412,7 @@ body{margin:0;background:var(--bg)}
     if (pending && pending.deadline <= Date.now()) resume(pending); else render();
 
     return {
-      start: start, destroy: function () { stopTimer(); container.removeEventListener('click', onClick); document.removeEventListener('keydown', onKey); container.innerHTML = ''; },
+      start: start, destroy: function () { stopTimer(); container.removeEventListener('click', onClick); container.removeEventListener('click', onCalcClick); document.removeEventListener('keydown', onKey); container.innerHTML = ''; },
       getState: function () { return S; }
     };
   }
