@@ -121,6 +121,8 @@ body{margin:0;background:var(--bg)}
   .em-h1{font-size:38px!important}
   .em-toast{bottom:100px}
 }
+.em-fab{position:fixed;right:16px;bottom:16px;z-index:30;border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+@media (max-width:860px){.em-fab{bottom:calc(88px + env(safe-area-inset-bottom,0px))}}
 @media (prefers-reduced-motion:reduce){.em-toast{transition:none}}
 
 </style>
@@ -159,6 +161,7 @@ body{margin:0;background:var(--bg)}
   <div id="em-fb" class="em-modal" hidden role="dialog" aria-modal="true" aria-label="Feedback">
     <div class="em-sheet" id="em-fb-body"></div>
   </div>
+  <div id="em-calc"></div>
   <div id="em-toast" class="em-toast" role="status" aria-live="polite"></div>
 </div>
 <noscript>Enriched Math 8 needs JavaScript. Please turn it on in your browser.</noscript>
@@ -1026,25 +1029,40 @@ body{margin:0;background:var(--bg)}
   ================================================================ */
   var lastVariant = {};
 
+  // Picks 4 wrong answers so the right answer lands on a random rank (A to E) once the options are sorted.
+  // Wrong answers written by the question author come first, generic ones fill the gaps.
+  function chooseWrong(pool, spec, r) {
+    if (spec.kind === 'text') return r.shuffle(pool).slice(0, 4);
+    var av = parseAnswer(spec.ans), items = pool.map(function (s, k) { return { s: s, v: parseAnswer(s), k: k }; }).filter(function (x) { return isFinite(x.v) && x.v !== av; });
+    var below = items.filter(function (x) { return x.v < av; }), above = items.filter(function (x) { return x.v > av; }), ranks = [];
+    for (var p = 0; p <= 4; p++) if (p <= below.length && 4 - p <= above.length) ranks.push(p);
+    if (!ranks.length || !isFinite(av)) return r.shuffle(pool).slice(0, 4);
+    var rank = r.pick(ranks);
+    function take(list, n) { return r.shuffle(list).sort(function (x, y) { return (x.k < 6 ? 0 : 1) - (y.k < 6 ? 0 : 1); }).slice(0, n).map(function (x) { return x.s; }); }
+    return take(below, rank).concat(take(above, 4 - rank));
+  }
+
   function makeOptions(spec, r) {
     if (spec.options) return finalize(spec.options.slice(), spec, r, true);
     var list = [], seen = {}; seen[spec.ans] = 1;
     function add(str) { if (str != null && !seen[str] && str !== '') { seen[str] = 1; list.push(str); } }
     function conv(w) { return typeof w === 'number' ? fmt(w) : (w && typeof w === 'object' && 'd' in w) ? fstr(w) : w; }
     var i;
-    if (spec.wrong) r.shuffle(spec.wrong).forEach(function (w) { add(conv(w)); });
+    if (spec.wrong) spec.wrong.forEach(function (w) { add(conv(w)); });
     if (spec.kind === 'int') {
-      var v = spec.value, span = Math.max(3, Math.round(Math.abs(v) * 0.2)), fixed = [1, -1, 2, -2, 10, -10];
-      if (list.length < 4) for (i = 0; i < fixed.length && list.length < 4; i++) { var c = v + fixed[i]; if (v >= 0 && c < 0) continue; add(fmt(c)); }
-      for (i = 0; list.length < 4 && i < 200; i++) { var c2 = v + r.int(-span, span); if (v >= 0 && c2 < 0) continue; add(fmt(c2)); }
+      var v = spec.value, span = Math.max(3, Math.round(Math.abs(v) * 0.15)), cand = [1, -1, 2, -2, 3, -3, 5, -5, 10, -10, span, -span, 2 * span, -2 * span].map(function (d) { return v + d; });
+      if (Number.isInteger(v) && Math.abs(v) >= 4) { cand.push(v * 2); if (v % 2 === 0) cand.push(v / 2); }
+      if (Number.isInteger(v) && v >= 10) { var rev = parseInt(String(v).split('').reverse().join(''), 10); cand.push(rev); cand.push(v + 100, v - 100); }
+      cand.forEach(function (c) { if (!Number.isInteger(c) && Number.isInteger(v)) return; if (v >= 0 && c < 0) return; add(fmt(c)); });
+      for (i = 0; list.length < 12 && i < 200; i++) { var c2 = v + r.int(-span - 5, span + 5); if (v >= 0 && c2 < 0) continue; add(fmt(c2)); }
       if (list.length < 4) for (i = 1; list.length < 4; i++) add(fmt(v + 20 + i));
     } else if (spec.kind === 'frac') {
-      var f = spec.value, n = f.n, d = f.d, cand = [F(n + 1, d), F(n, d + 1), F(n - 1, d), F(n + 1, d + 1), F(n + d, d + 1), F(n * 2, d + 1)];
-      if (n !== 0) cand.push(F(d, n));
-      cand.forEach(function (x) { if (x.d !== 0) add(fstr(x)); });
+      var f = spec.value, n = f.n, d = f.d, cand2 = [F(n + 1, d), F(n, d + 1), F(n - 1, d), F(n + 1, d + 1), F(n + d, d + 1), F(n * 2, d + 1)];
+      if (n !== 0) cand2.push(F(d, n));
+      cand2.forEach(function (x) { if (x.d !== 0) add(fstr(x)); });
       for (i = 0; list.length < 4 && i < 200; i++) add(fstr(F(r.int(1, 12), r.int(2, 12))));
     }
-    return finalize(r.shuffle(list).slice(0, 4).concat([spec.ans]), spec, r, false);
+    return finalize(chooseWrong(list, spec, r).concat([spec.ans]), spec, r, false);
   }
   function finalize(opts, spec, r, keepOrder) {
     if (keepOrder) return opts;
@@ -2227,6 +2245,16 @@ body{margin:0;background:var(--bg)}
       return fig(svg(x0 + w + 60, y0 + 30, 'Right triangle', g));
     };
 
+    // Cylinder with radius and height labels.
+    V.cylinder = function (rad, h) {
+      var s = 90 / Math.max(rad * 2, h), rx = rad * s, ry = Math.max(8, rx * 0.32), H = h * s, cx = rx + 40, top = ry + 10, bot = top + H;
+      var g = '<path class="me-fb" d="M' + (cx - rx) + ',' + top + ' L' + (cx - rx) + ',' + bot + ' A' + rx + ',' + ry + ' 0 0 0 ' + (cx + rx) + ',' + bot + ' L' + (cx + rx) + ',' + top + ' Z"/>' +
+        '<ellipse class="me-fa" cx="' + cx + '" cy="' + top + '" rx="' + rx + '" ry="' + ry + '"/>' +
+        '<line class="me-ln me-ds" x1="' + cx + '" y1="' + top + '" x2="' + (cx + rx) + '" y2="' + top + '"/>' +
+        tx(cx + rx / 2, top - 5, 'r = ' + rad, 'me-tx me-sm') + tx(cx + rx + 12, top + H / 2 + ry / 2, 'h = ' + h, 'me-tx me-sm', 'start');
+      return fig(svg(cx + rx + 90, bot + ry + 12, 'Cylinder with radius ' + rad + ' and height ' + h, g));
+    };
+
     // Isometric box with optional space diagonal.
     V.box3d = function (l, w, h, diag) {
       var s = 95 / Math.max(l, w, h), c30 = 0.866, ox = 12 + w * s * c30, oy = 12 + h * s;
@@ -2725,6 +2753,52 @@ body{margin:0;background:var(--bg)}
     var l = r.int(2, 9), w = r.int(2, 9), h = r.int(2, 9), A = l * w, B = w * h, Cc = l * h, v = l * w * h;
     return I('A rectangular box has faces with areas ' + A + ' cm^{2}, ' + B + ' cm^{2} and ' + Cc + ' cm^{2} (one from each of the three different kinds of face). What is the volume of the box, in cm^{3}?', [
       'Call the edges l, w, h. Then lw = ' + A + ', wh = ' + B + ' and lh = ' + Cc + '.', 'Multiply all three: (lw)(wh)(lh) = (lwh)^{2} = ' + A + ' × ' + B + ' × ' + Cc + ' = ' + A * B * Cc + '.', 'So lwh = √{' + A * B * Cc + '} = ' + v + ' cm^{3}.', 'No need to find the individual edges.'], v, { check: Math.sqrt(A * B * Cc) });
+  });
+
+  // ---------- m4t2 additions: cylinders and prisms (BC Grade 8 surface area and volume) ----------
+  M4[2][1].push(function (r) { // volume of a cylinder
+    var rr = r.int(2, 9), h = r.int(3, 12), V0 = rr * rr * h;
+    return PI('A cylinder has a radius of ' + rr + ' cm and a height of ' + h + ' cm. What is its volume, in cm^{3}? Leave π in your answer.', [
+      'Volume of a cylinder = base area × height = π r^{2} h.', 'π × ' + rr + '^{2} × ' + h + ' = π × ' + rr * rr + ' × ' + h + ' = ' + V0 + 'π cm^{3}.'], 0, V0,
+      [[0, 2 * rr * h], [0, rr * h], [0, 2 * rr * rr * h], [0, rr * rr]], { visual: V.cylinder(rr, h) });
+  });
+  M4[2][1].push(function (r) { // curved surface area, diameter given
+    var rr = r.int(2, 9), h = r.int(3, 12), d = 2 * rr, k = d * h;
+    return PI('A can has a diameter of ' + d + ' cm and a height of ' + h + ' cm. A label wraps once around the curved side with no overlap and no gaps. What is the area of the label, in cm^{2}? Leave π in your answer.', [
+      'Unroll the label. It is a rectangle as tall as the can and as wide as the distance around the can.', 'Distance around = circumference = π × diameter = ' + d + 'π.', 'Area = ' + d + 'π × ' + h + ' = ' + k + 'π cm^{2}.'], 0, k,
+      [[0, rr * h], [0, 2 * k], [0, rr * rr * h], [0, rr * (2 * rr + h)]], { visual: V.cylinder(rr, h) });
+  });
+  M4[2][1].push(function (r) { // total surface area of a closed cylinder
+    var rr = r.int(2, 7), h = r.int(2, 10), k = 2 * rr * rr + 2 * rr * h;
+    return PI('A closed cylinder has radius ' + rr + ' cm and height ' + h + ' cm. What is its total surface area, in cm^{2}? Leave π in your answer.', [
+      'Two circular ends: 2 × π × ' + rr + '^{2} = ' + 2 * rr * rr + 'π.', 'Curved side: 2π × ' + rr + ' × ' + h + ' = ' + 2 * rr * h + 'π.', 'Total = ' + 2 * rr * rr + 'π + ' + 2 * rr * h + 'π = ' + k + 'π cm^{2}.'], 0, k,
+      [[0, rr * rr + 2 * rr * h], [0, 2 * rr * h], [0, rr * rr * h], [0, 2 * rr * rr]], { visual: V.cylinder(rr, h) });
+  });
+  M4[2][1].push(function (r) { // triangular prism volume
+    var b = r.int(3, 12), t = r.int(2, 9) * 2, L = r.int(4, 15), V0 = b * t / 2 * L;
+    return I('A triangular prism has a triangular base with base ' + b + ' cm and height ' + t + ' cm. The prism is ' + L + ' cm long. What is its volume, in cm^{3}?', [
+      'Volume of any prism = area of the base × length.', 'Triangle area = {{1|2}} × ' + b + ' × ' + t + ' = ' + b * t / 2 + '.', 'Volume = ' + b * t / 2 + ' × ' + L + ' = ' + V0 + ' cm^{3}.'], V0, { check: V0 });
+  });
+  M4[2][2].push(function (r) { // pour between cylinders
+    var R = r.int(2, 5), m = r.int(2, 4), rr = R * m, h = r.int(2, 6) * 2, ans = m * m * h;
+    return I('A cylinder with radius ' + rr + ' cm is filled with water to a height of ' + h + ' cm. All of the water is poured into an empty cylinder with radius ' + R + ' cm. How high does the water reach in the second cylinder, in cm?', [
+      'The volume of water stays the same.', 'First cylinder: π × ' + rr + '^{2} × ' + h + ' = ' + rr * rr * h + 'π.', 'Second cylinder with height x: π × ' + R + '^{2} × x = ' + R * R + 'πx.', rr * rr * h + 'π = ' + R * R + 'πx, so x = ' + rr * rr * h + ' ÷ ' + R * R + ' = ' + ans + ' cm.', 'Shortcut: the radius is ' + m + ' times smaller, so the base is ' + m * m + ' times smaller and the water is ' + m * m + ' times higher.'], ans, { check: ans, visual: V.cylinder(rr, h) });
+  });
+  M4[2][2].push(function (r) { // percent change of cylinder volume when radius grows
+    var p = r.pick([[10, 21], [20, 44], [30, 69], [50, 125], [100, 300]]), f = (100 + p[0]) / 100;
+    return I('The radius of a cylinder is increased by ' + p[0] + '% and the height stays the same. By what percent does the volume increase?', [
+      'Volume = π r^{2} h. The radius is multiplied by ' + fmt(f) + ', so r^{2} is multiplied by ' + fmt(f) + ' × ' + fmt(f) + ' = ' + fmt(f * f) + '.', 'The volume is ' + fmt(f * f) + ' times as big, an increase of ' + p[1] + '%.', 'Watch out: the increase is not ' + p[0] + '%. Radius counts twice in the formula.'], p[1], { check: p[1] });
+  });
+  M4[2][2].push(function (r) { // cylinder with equal height and diameter: volume to radius
+    var rr = r.int(2, 8), Vk = 2 * rr * rr * rr;
+    return I('A cylinder has a height equal to its diameter. Its volume is ' + Vk + 'π cm^{3}. What is its radius, in cm?', [
+      'Height = diameter = 2r, so the volume is π r^{2} × 2r = 2π r^{3}.', '2π r^{3} = ' + Vk + 'π, so r^{3} = ' + Vk / 2 + '.', rr + ' × ' + rr + ' × ' + rr + ' = ' + rr * rr * rr + ', so r = ' + rr + ' cm.'], rr, { check: rr });
+  });
+  M4[2][3].push(function (r) { // roll a sheet of paper two ways
+    var pr = r.pick([[3, 2], [4, 3], [5, 2], [5, 3], [5, 4], [7, 4], [7, 5], [8, 5], [9, 4]]), s = r.int(1, 3), a = pr[0] * s, b = pr[1] * s;
+    var ans = pr[0] + ' : ' + pr[1], opts = [ans, pr[1] + ' : ' + pr[0], pr[0] * pr[0] + ' : ' + pr[1] * pr[1], pr[1] * pr[1] + ' : ' + pr[0] * pr[0], '1 : 1'];
+    return { q: 'A rectangular sheet of paper measures ' + a + ' cm by ' + b + ' cm. Rolled one way, with the ' + a + ' cm edges joined, it makes a tube. Rolled the other way, with the ' + b + ' cm edges joined, it makes a different tube. The joined edges just meet with no overlap. What is the ratio of the larger tube volume to the smaller tube volume?', kind: 'text', ans: ans, options: opts, check: ans, shuffle: true,
+      steps: ['Rolling so the edge of length c goes around the tube makes the circumference c, so the radius is c ÷ 2π. The other side is the height.', 'Volume = π r^{2} h = π × (c ÷ 2π)^{2} × h = c^{2} h ÷ 4π.', 'The ' + a + ' cm edge around: ' + a + '^{2} × ' + b + ' ÷ 4π = ' + a * a * b + ' ÷ 4π. The ' + b + ' cm edge around: ' + b + '^{2} × ' + a + ' ÷ 4π = ' + b * b * a + ' ÷ 4π.', 'Ratio = ' + a * a * b + ' : ' + b * b * a + ' = ' + ans + '.', 'Shortcut: the ratio is just (long edge) : (short edge). The long edge as circumference gives the fatter tube.'] };
   });
 
   // ---------- m4t3: angles, parallel lines and polygons ----------
@@ -3342,7 +3416,7 @@ body{margin:0;background:var(--bg)}
   var L = {
     m4t0: '## Pythagoras and the right triangle\nIn a right triangle the two **legs** meet at the right angle. The side opposite it is the **hypotenuse**, always the longest. The rule is a^{2} + b^{2} = c^{2}.\n:::visual rightTriangle 3 4 5 3 4\nLearn the triples 3, 4, 5 and 5, 12, 13 and 8, 15, 17 and 7, 24, 25. Any multiple of a triple is a triple too, so 9, 12, 15 works.\nWhen a figure looks complicated, hunt for right angles and split it into right triangles. Use the shared side as a bridge from one triangle to the next.\n> Area two ways: the altitude to the hypotenuse is (leg × leg) ÷ hypotenuse.\n### Worked example\n:::worked m4t0 2',
     m4t1: '## Solids, surface area and space diagonals\n**Surface area** is the total area of all the faces. For any prism: SA = 2 × (base area) + (base perimeter) × height.\n:::visual box3d 3 4 12 1\nThe **space diagonal** of a box joins opposite corners through the inside. Use Pythagoras twice, or jump straight to D^{2} = l^{2} + w^{2} + h^{2}. This box has D^{2} = 9 + 16 + 144 = 169, so D = 13.\nFor painted cube puzzles, remove one layer from every side to find the unpainted core. Corners have 3 painted faces, edges 2, face centres 1.\n> An ant on the outside of a box takes the shortest route by unfolding two faces flat and drawing a straight line.\n### Worked example\n:::worked m4t1 3',
-    m4t2: '## Composite shapes and scaling\nSplit a complicated shape into rectangles, triangles and circles, or subtract a cut out piece from a big shape. A notch cut out of a corner never changes the perimeter.\n:::visual shaded ring\nWhen every length is multiplied by k: lengths scale by **k**, areas by **k^{2}**, and volumes by **k^{3}**. Doubling the sides of a square makes the area 4 times as big. Doubling the edges of a cube makes the volume 8 times as big.\nPercent changes behave the same way. Sides 20% longer means area 1.2 × 1.2 = 1.44 times, an increase of 44%.\n> Always decide first: is the quantity a length, an area or a volume?\n### Worked example\n:::worked m4t2 2',
+    m4t2: '## Composite shapes and scaling\nSplit a complicated shape into rectangles, triangles and circles, or subtract a cut out piece from a big shape. A notch cut out of a corner never changes the perimeter.\n:::visual shaded ring\nWhen every length is multiplied by k: lengths scale by **k**, areas by **k^{2}**, and volumes by **k^{3}**. Doubling the sides of a square makes the area 4 times as big. Doubling the edges of a cube makes the volume 8 times as big.\nPercent changes behave the same way. Sides 20% longer means area 1.2 × 1.2 = 1.44 times, an increase of 44%.\n> Always decide first: is the quantity a length, an area or a volume?\n### Cylinders and prisms\nFor any prism or cylinder, **volume = base area × height**. A cylinder has a circular base, so V = π r^{2} h.\n:::visual cylinder 3 8\nThe curved side unrolls into a rectangle as wide as the circumference. Its area is 2π r h. Add two circles for the closed surface: 2π r^{2} + 2π r h.\n### Worked example\n:::worked m4t2 2',
     m4t3: '## Angles, parallel lines and polygons\nAngles on a straight line add to 180°. Angles around a point add to 360°. Angles in a triangle add to 180°.\n:::visual parallelTransversal 4 65° 6 ?\nHere the marked angles are alternate angles, so they are equal. When a line crosses two **parallel** lines: corresponding angles are equal, alternate angles are equal, and co-interior angles add to 180°. Acute angles match acute angles.\n:::visual bentLine 40 35 ?\nA bend between two parallel lines equals the sum of the two outer angles. Draw a helper line through the bend parallel to the others.\nFor a polygon with n sides the interior angles add to (n ' + MINUS + ' 2) × 180°. Exterior angles of any polygon add to 360°, so a regular polygon has exterior angles of 360° ÷ n.\n:::visual polygonAngles 6\n### Worked example\n:::worked m4t3 2',
     m4t4: '## Shaded areas\nShaded area problems are mostly **subtraction**: whole shape minus the pieces you do not want. Or **addition**: shaded pieces that add up to a simple shape.\n:::visual shaded inscribed\nA circle inside a square touching all four sides has radius half the side, so the shaded corners have area s^{2} ' + MINUS + ' π(s/2)^{2}.\n:::visual shaded lens\nFor an overlap, add the two pieces then subtract the whole. That is the lens trick: two quarter circles minus the square.\nLook for symmetry, pieces you can slide to a new place, and shapes that cancel. Leave π in the answer.\n> Joining the midpoints of any quadrilateral shape that is a rectangle or square gives a shape of exactly half the area.\n### Worked example\n:::worked m4t4 2',
     m5t0: '## Mean, median and mode\nThe **mean** is the total divided by the count. The **median** is the middle value of the sorted list. The **mode** is the most common value.\n:::visual barChart 3 5 4 6 2\nTurn means into totals. If a mean of 80 over 5 tests changes to 82 over 6 tests, the totals go from 400 to 492, so the new test was 92.\nFor two groups, use a weighted mean: total of everyone divided by the number of everyone. The class mean sits closer to the bigger group.\nAdding a constant shifts the mean and median but not the range. Multiplying changes all three.\n> A moving average slides a window along the data to smooth out spikes.\n### Worked example\n:::worked m5t0 2',
@@ -3355,12 +3429,23 @@ body{margin:0;background:var(--bg)}
   /* ==================================================================
      REGISTRATION
   ================================================================== */
+  // Answers with pi (and any spec flagged shuffle) carry their own option list. Shuffle it so the right answer is not always last.
+  [M4, M5].forEach(function (mod) {
+    mod.forEach(function (tiers) {
+      [1, 2, 3].forEach(function (t) {
+        tiers[t] = tiers[t].map(function (g) {
+          return function (r) { var sp = g(r); if (sp.options && (sp.shuffle || /π/.test(sp.ans))) sp.options = r.shuffle(sp.options.slice()); return sp; };
+        });
+      });
+    });
+  });
+
   E.registerModule({
     id: 'm4', title: 'Spatial Sense, Geometry & Measurement',
     topics: [
       { id: 'm4t0', title: 'Pythagorean theorem in multi triangle figures', gens: M4[0], lesson: L.m4t0, summary: 'Hypotenuse and legs, ladders, distance, chains of triangles, altitudes, incircles and trapezoids.' },
       { id: 'm4t1', title: 'Space diagonals, surface area and 3D solids', gens: M4[1], lesson: L.m4t1, summary: 'Prism surface area, space diagonals, 3D distance, painted cubes, unfolding routes and tunnels.' },
-      { id: 'm4t2', title: 'Composite shapes and scaling laws', gens: M4[2], lesson: L.m4t2, summary: 'L shapes, semicircles, rings, and the k, k squared and k cubed scaling laws.' },
+      { id: 'm4t2', title: 'Composite shapes and scaling laws', gens: M4[2], lesson: L.m4t2, summary: 'Cylinders and prisms, L shapes, semicircles, rings, and the k, k squared and k cubed scaling laws.' },
       { id: 'm4t3', title: 'Parallel lines and polygon angles', gens: M4[3], lesson: L.m4t3, summary: 'Transversals, bent lines, interior and exterior angles, isosceles chasing and bisectors.' },
       { id: 'm4t4', title: 'Shaded areas inside squares and circles', gens: M4[4], lesson: L.m4t4, summary: 'Circles in squares, lenses, rings, chords, lunes and midpoint squares, with exact answers in π.' }
     ]
@@ -3932,7 +4017,11 @@ body{margin:0;background:var(--bg)}
     var finals = {}, seen2 = {}; (function all(a) { var key = a.join(','); if (seen2[key]) return; seen2[key] = true; if (a.length === 1) { finals[a[0]] = true; return; } for (var i = 0; i < a.length; i++) for (var j = i + 1; j < a.length; j++) { var b = a.filter(function (_, k) { return k !== i && k !== j; }); b.push(Math.abs(a[i] - a[j])); b.sort(function (x, y) { return x - y; }); all(b); } })(start);
     var mn = Math.min.apply(null, Object.keys(finals).map(Number));
     if (found === null) return M6[3][3][0](r);
-    return I('The whole numbers from 1 to ' + N + ' are written on a board. A move erases any two numbers and writes down their difference (the larger minus the smaller). After ' + (N - 1) + ' moves one number is left. What is the smallest number that can be left?', ['Look at parity. If you erase a and b and write |a ' + MINUS + ' b|, the sum of all numbers changes by ' + MINUS + '(a + b) + |a ' + MINUS + ' b|, and a + b and |a ' + MINUS + ' b| always have the same parity. So the parity of the total never changes.', 'The starting total is ' + N + '(' + (N + 1) + ') ÷ 2 = ' + S + ', which is ' + (S % 2 ? 'odd' : 'even') + '. So the last number is ' + (S % 2 ? 'odd, and cannot be 0. The smallest it could be is 1.' : 'even, so it could be 0.'), 'It can be reached. One sequence of moves: ' + found.map(function (o) { return '(' + o[0] + ', ' + o[1] + ') gives ' + o[2]; }).join('; ') + '.', 'The smallest possible final number is ' + target + '.'], target, { check: mn });
+    var reach = Object.keys(finals).map(Number).filter(function (v) { return v <= N; }), good = r.pick(reach), bad = [];
+    for (var w = 0; w <= N + 8; w++) if (w % 2 !== S % 2) bad.push(w);
+    var wrongs = r.shuffle(bad).slice(0, 4), opts = r.shuffle([String(good)].concat(wrongs.map(String)));
+    return { q: tidy('The whole numbers from 1 to ' + N + ' are written on a board. A move erases any two numbers and writes down their difference (the larger minus the smaller). After ' + (N - 1) + ' moves one number is left. Which of these could be the number left?'), kind: 'text', ans: String(good), options: opts, check: String(good), shuffle: true,
+      steps: tidyAll(['Look at parity. If you erase a and b and write |a ' + MINUS + ' b|, the sum of all numbers changes by ' + MINUS + '(a + b) + |a ' + MINUS + ' b|, and a + b and |a ' + MINUS + ' b| always have the same parity. So the parity of the total never changes.', 'The starting total is ' + N + '(' + (N + 1) + ') ÷ 2 = ' + S + ', which is ' + (S % 2 ? 'odd' : 'even') + '. So the last number must be ' + (S % 2 ? 'odd' : 'even') + '.', 'Only ' + good + ' has the right parity, so it is the only one that could be left.']) };
   });
 
   /* ==================================================================
@@ -3964,7 +4053,7 @@ body{margin:0;background:var(--bg)}
     { id: 'B', label: 'Part B', blurb: 'Medium', count: 10, tier: 2, points: 6 },
     { id: 'C', label: 'Part C', blurb: 'Hard, non routine', count: 5, tier: 3, points: 8 }
   ];
-  var TOTAL_QUESTIONS = 25, TOTAL_POINTS = 150;
+  var TOTAL_QUESTIONS = 25, TOTAL_POINTS = 150, BLANK_POINTS = 2, BLANK_MAX = 10;
   var SESSION_KEY = 'enrichedMath8.gaussSession.v1', APP_KEY = 'enrichedMath8.v1';
 
   function mulberry(seed) { var a = seed >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; var t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -4027,15 +4116,17 @@ body{margin:0;background:var(--bg)}
   /* Score a finished contest. answers: { questionNumber: chosenOptionIndex }. spent: seconds per question. flags: { n: true }. */
   function score(test, answers, spent, flags) {
     answers = answers || {}; spent = spent || {}; flags = flags || {};
-    var res = { score: 0, max: test.totalPoints, correct: 0, answered: 0, total: test.items.length, parts: {}, modules: {}, tiers: {}, items: [] };
+    var res = { score: 0, max: test.totalPoints, correct: 0, answered: 0, total: test.items.length, blankCredit: 0, parts: {}, modules: {}, tiers: {}, items: [] };
+    var blanksPaid = 0; // Real Gauss rule: each unanswered question earns 2 points, for at most 10 unanswered questions.
     PARTS.forEach(function (p) { res.parts[p.id] = { label: p.label, blurb: p.blurb, total: 0, correct: 0, answered: 0, points: 0, max: 0, seconds: 0 }; });
     test.items.forEach(function (it) {
       var chosen = answers[it.n], has = chosen !== undefined && chosen !== null, ok = has && chosen === it.q.correctIndex, P = res.parts[it.part];
       var M = res.modules[it.moduleId] = res.modules[it.moduleId] || { total: 0, correct: 0, answered: 0, points: 0, max: 0 };
       P.total++; P.max += it.points; M.total++; M.max += it.points; P.seconds += spent[it.n] || 0;
       if (has) { res.answered++; P.answered++; M.answered++; }
+      var credit = 0; if (!has && blanksPaid < BLANK_MAX) { credit = BLANK_POINTS; blanksPaid++; res.score += credit; res.blankCredit += credit; P.points += credit; M.points += credit; }
       if (ok) { res.correct++; res.score += it.points; P.correct++; P.points += it.points; M.correct++; M.points += it.points; }
-      res.items.push({ n: it.n, part: it.part, points: it.points, moduleId: it.moduleId, topicId: it.topicId, tier: it.tier, chosen: has ? chosen : null, correctIndex: it.q.correctIndex, isCorrect: !!ok, answered: !!has, spent: Math.round(spent[it.n] || 0), flagged: !!flags[it.n] });
+      res.items.push({ n: it.n, part: it.part, points: it.points, moduleId: it.moduleId, topicId: it.topicId, tier: it.tier, chosen: has ? chosen : null, correctIndex: it.q.correctIndex, isCorrect: !!ok, answered: !!has, credit: credit, spent: Math.round(spent[it.n] || 0), flagged: !!flags[it.n] });
     });
     res.percent = res.max ? Math.round(1000 * res.score / res.max) / 10 : 0;
     return res;
@@ -4050,7 +4141,9 @@ body{margin:0;background:var(--bg)}
     var A = res.parts.A, B = res.parts.B, C = res.parts.C;
     if (A.correct < A.total * 0.8) tips.push('Part A is where contests are won. You got ' + A.correct + ' of ' + A.total + '. Aim for at least 8 by slowing down and checking each easy question once.');
     if (C.correct === 0 && C.answered > 0) tips.push('Part C had no correct answers. These questions reward a plan: draw a picture, try small cases, or look for a pattern before you calculate.');
-    if (res.answered < res.total) tips.push('You left ' + (res.total - res.answered) + ' question' + (res.total - res.answered === 1 ? '' : 's') + ' unanswered. There is no penalty for a wrong answer, so always make your best guess before time runs out.');
+    var blanks = res.total - res.answered;
+    if (blanks > BLANK_MAX) tips.push('You left ' + blanks + ' questions unanswered. Only the first ' + BLANK_MAX + ' blanks earn ' + BLANK_POINTS + ' points, so blanks beyond that earn nothing. Use your last minutes to answer them.');
+    else if (blanks > 0) tips.push('You left ' + blanks + ' question' + (blanks === 1 ? '' : 's') + ' blank, which earned ' + blanks * BLANK_POINTS + ' points. A wrong answer earns 0, so guess only after you rule out choices: down to 2 choices in Part A or B, down to 3 in Part C.');
     if (res.seconds !== undefined && res.seconds < CONTEST_SECONDS - 600 && res.answered === res.total) tips.push('You finished with ' + Math.round((CONTEST_SECONDS - res.seconds) / 60) + ' minutes to spare. Use spare time to recheck Part B and Part C, especially any flagged questions.');
     var flaggedWrong = res.items.filter(function (i) { return i.flagged && !i.isCorrect; }).length;
     if (flaggedWrong) tips.push(flaggedWrong + ' of your flagged questions were wrong or blank. Flagging was the right instinct, so review those solutions first.');
@@ -4090,6 +4183,28 @@ body{margin:0;background:var(--bg)}
   function saveSession(s) { try { root.localStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch (e) { /* storage blocked */ } }
   function loadSession() { try { var raw = root.localStorage.getItem(SESSION_KEY); if (!raw) return null; var s = JSON.parse(raw); return s && s.v === 1 && s.test && s.test.items && s.test.items.length === TOTAL_QUESTIONS ? s : null; } catch (e) { return null; } }
   function clearSession() { try { root.localStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ } }
+
+  /* Calculator arithmetic shared with the app: no eval, so nothing else can run. */
+  function calcEval(str, ans) {
+    var src = str.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-').replace(/\s+/g, ''), i = 0;
+    function peek() { return src.charAt(i); }
+    function num() { var m = /^(\d+\.?\d*|\.\d+)/.exec(src.slice(i)); if (!m) throw 0; i += m[0].length; return parseFloat(m[0]); }
+    function atom() {
+      var c = peek(), v;
+      if (c === '(') { i++; v = expr(); if (peek() === ')') i++; }
+      else if (c === '√') { i++; v = atom(); if (v < 0) throw 0; v = Math.sqrt(v); }
+      else if (c === 'A') { i++; v = ans; }
+      else v = num();
+      while (peek() === '²') { i++; v = v * v; }
+      return v;
+    }
+    function power() { var b = atom(); if (peek() === '^') { i++; return Math.pow(b, unary()); } return b; }
+    function unary() { if (peek() === '-') { i++; return -unary(); } if (peek() === '+') { i++; return unary(); } return power(); }
+    function term() { var v = unary(); for (;;) { var c = peek(); if (c === '*') { i++; v *= unary(); } else if (c === '/') { i++; var d = unary(); if (d === 0) throw 0; v /= d; } else if (c === '(' || c === '√' || c === 'A') { v *= unary(); } else return v; } }
+    function expr() { var v = term(); for (;;) { var c = peek(); if (c === '+') { i++; v += term(); } else if (c === '-') { i++; v -= term(); } else return v; } }
+    var out = expr(); if (i < src.length) { if (src.charAt(i) === ')') { /* ignore stray close bracket */ } else throw 0; } if (!isFinite(out)) throw 0; return out;
+  }
+  function calcFmt(v) { if (Math.abs(v) >= 1e15 || (Math.abs(v) < 1e-9 && v !== 0)) return v.toExponential(6); return String(parseFloat(v.toPrecision(12))); }
 
   /* ==================================================================
      CONTEST SIMULATOR: STYLES
@@ -4206,26 +4321,7 @@ body{margin:0;background:var(--bg)}
     var timer = null, toastTimer = null;
 
     /* ---------- built in calculator: basic, not programmable, not graphing (like contest rules) ---------- */
-    function calcEval(str) {
-      var src = str.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-').replace(/\s+/g, ''), i = 0;
-      function peek() { return src.charAt(i); }
-      function num() { var m = /^(\d+\.?\d*|\.\d+)/.exec(src.slice(i)); if (!m) throw 0; i += m[0].length; return parseFloat(m[0]); }
-      function atom() {
-        var c = peek(), v;
-        if (c === '(') { i++; v = expr(); if (peek() === ')') i++; }
-        else if (c === '√') { i++; v = atom(); if (v < 0) throw 0; v = Math.sqrt(v); }
-        else if (c === 'A') { i++; v = S.calc.ans; }
-        else v = num();
-        while (peek() === '²') { i++; v = v * v; }
-        return v;
-      }
-      function power() { var b = atom(); if (peek() === '^') { i++; return Math.pow(b, unary()); } return b; }
-      function unary() { if (peek() === '-') { i++; return -unary(); } if (peek() === '+') { i++; return unary(); } return power(); }
-      function term() { var v = unary(); for (;;) { var c = peek(); if (c === '*') { i++; v *= unary(); } else if (c === '/') { i++; var d = unary(); if (d === 0) throw 0; v /= d; } else if (c === '(' || c === '√' || c === 'A') { v *= unary(); } else return v; } }
-      function expr() { var v = term(); for (;;) { var c = peek(); if (c === '+') { i++; v += term(); } else if (c === '-') { i++; v -= term(); } else return v; } }
-      var out = expr(); if (i < src.length) { if (src.charAt(i) === ')') { /* ignore stray close bracket */ } else throw 0; } if (!isFinite(out)) throw 0; return out;
-    }
-    function calcFmt(v) { if (Math.abs(v) >= 1e15 || (Math.abs(v) < 1e-9 && v !== 0)) return v.toExponential(6); return String(parseFloat(v.toPrecision(12))); }
+    function calcEvalS(str) { return calcEval(str, S.calc.ans); }
     function calcShow() { var e = container.querySelector('#gs-calc-expr'), r = container.querySelector('#gs-calc-res'); if (e) e.textContent = S.calc.expr || '\u00A0'; if (r) r.textContent = S.calc.res; }
     function calcPress(k) {
       var c = S.calc;
@@ -4233,11 +4329,11 @@ body{margin:0;background:var(--bg)}
       else if (k === 'back') { if (c.done) { c.expr = ''; c.res = '0'; c.done = false; } else c.expr = c.expr.slice(0, -1); }
       else if (k === '=') {
         if (!c.expr) return;
-        try { var v = calcEval(c.expr); c.res = calcFmt(v); c.ans = v; c.done = true; } catch (x) { c.res = 'Error'; c.done = true; }
+        try { var v = calcEvalS(c.expr); c.res = calcFmt(v); c.ans = v; c.done = true; } catch (x) { c.res = 'Error'; c.done = true; }
       } else {
         if (c.done) { if (/^[+\-×÷^²]$/.test(k) && c.res !== 'Error') c.expr = 'A'; else c.expr = ''; c.done = false; c.res = '0'; }
         c.expr += k;
-        try { c.res = c.expr ? calcFmt(calcEval(c.expr)) : '0'; } catch (x) { /* unfinished expression: keep previous result */ }
+        try { c.res = c.expr ? calcFmt(calcEvalS(c.expr)) : '0'; } catch (x) { /* unfinished expression: keep previous result */ }
       }
       calcShow();
     }
@@ -4297,7 +4393,7 @@ body{margin:0;background:var(--bg)}
       var rows = h.slice().reverse().slice(0, 6).map(function (g) { return '<tr><td>' + new Date(g.at).toLocaleDateString() + '</td><td><b>' + g.score + '</b> / ' + g.max + '</td><td>' + (g.correct !== undefined ? g.correct + ' of ' + (g.total || 25) : '') + '</td><td>' + Math.round(g.seconds / 60) + ' min</td></tr>'; }).join('');
       return '<div class="gs-root gs-setup"><section class="gs-card"><h1 class="gs-hero-title">Gauss Contest Simulator</h1><p class="gs-muted">A full length practice contest with fresh questions from all six modules every time.</p>' +
         '<div class="gs-rules"><div class="gs-rule"><b>25</b>questions</div><div class="gs-rule"><b>60 min</b>one countdown clock</div><div class="gs-rule"><b>Part A</b>10 easy questions, 5 points each</div><div class="gs-rule"><b>Part B</b>10 medium questions, 6 points each</div><div class="gs-rule"><b>Part C</b>5 hard non routine questions, 8 points each</div><div class="gs-rule"><b>150</b>points in total</div></div>' +
-        '<ul class="gs-tips"><li>Each question has five choices, A to E. A wrong answer costs nothing, so never leave a blank.</li><li>Flag any question to come back to it. Use the number grid to jump around.</li><li>Your answers are saved as you go. If you close the page, the clock keeps running.</li><li>Solutions appear only after you submit.</li></ul>' +
+        '<ul class="gs-tips"><li>Each question has five choices, A to E. A wrong answer scores 0, but a blank scores 2 points (for up to 10 blanks). Guess only when you can rule out choices, down to 2 in Part A or B and down to 3 in Part C.</li><li>Flag any question to come back to it. Use the number grid to jump around.</li><li>Your answers are saved as you go. If you close the page, the clock keeps running.</li><li>Solutions appear only after you submit.</li></ul>' +
         (S.notice ? '<p><b>' + esc(S.notice) + '</b></p>' : '') +
         '<div class="gs-row" style="margin-top:14px"><button class="gs-btn' + (S.calcOn ? ' gs-on' : '') + '" data-act="calcpref" aria-pressed="' + S.calcOn + '">Calculator: ' + (S.calcOn ? 'on' : 'off') + '</button></div><p class="gs-muted" style="margin:6px 0 0;font-size:.9em">The real Gauss contest allows a basic, non programmable calculator. Turn it off for a no calculator drill.</p><div class="gs-row" style="margin-top:14px"><button class="gs-btn gs-primary" data-act="start" style="font-size:1.15em;min-height:60px">Start the contest</button></div></section>' + resumeCard +
         '<section class="gs-card"><h2>Your history</h2>' + (h.length ? '<p>Best score: <b>' + best + ' / ' + h[0].max + '</b></p><table class="gs-table"><thead><tr><th>Date</th><th>Score</th><th>Correct</th><th>Time</th></tr></thead><tbody>' + rows + '</tbody></table>' : '<p class="gs-muted">No contests yet. Your scores will be saved here.</p>') + '</section></div>';
@@ -4330,7 +4426,7 @@ body{margin:0;background:var(--bg)}
     function submitModalHTML() {
       var blank = S.test.items.filter(function (i) { return S.answers[i.n] === undefined; }).map(function (i) { return i.n; }), fl = Object.keys(S.flags).map(Number).sort(function (a, b) { return a - b; });
       return '<div class="gs-overlay" role="dialog" aria-modal="true" aria-labelledby="gs-mt"><div class="gs-modal"><h2 id="gs-mt">Submit your contest?</h2><p>You have answered <b>' + (25 - blank.length) + ' of 25</b> questions and have <b>' + mmss((S.deadline - Date.now()) / 1000) + '</b> left.</p>' +
-        (blank.length ? '<p><b>Not answered:</b> ' + blank.join(', ') + '. There is no penalty for a wrong answer, so it is worth guessing.</p>' : '<p>Every question has an answer.</p>') + (fl.length ? '<p><b>Flagged:</b> ' + fl.join(', ') + '.</p>' : '') +
+        (blank.length ? '<p><b>Not answered:</b> ' + blank.join(', ') + '. Each blank is worth 2 points (up to 10 blanks) and a wrong answer is worth 0, so guess only if you can narrow it down.</p>' : '<p>Every question has an answer.</p>') + (fl.length ? '<p><b>Flagged:</b> ' + fl.join(', ') + '.</p>' : '') +
         '<div class="gs-row"><button class="gs-btn" data-act="cancel">Keep working</button><button class="gs-btn gs-primary" data-act="confirm">Submit and see my score</button></div></div></div>';
     }
 
@@ -4346,10 +4442,10 @@ body{margin:0;background:var(--bg)}
       var items = S.test.items.filter(function (it) { var r = R.items[it.n - 1]; return S.filter === 'all' || (S.filter === 'wrong' && r.answered && !r.isCorrect) || (S.filter === 'blank' && !r.answered) || (S.filter === 'flagged' && r.flagged); }).map(function (it) {
         var r = R.items[it.n - 1], q = it.q, cls = r.isCorrect ? 'gs-ok' : r.answered ? 'gs-bad' : 'gs-blank';
         var ol = q.optionsHtml.map(function (o, i) { return '<li class="' + (i === q.correctIndex ? 'gs-good' : (i === r.chosen ? 'gs-wrong' : '')) + '"><b>' + LET[i] + '</b><span>' + o + (i === q.correctIndex ? ' (correct)' : '') + (i === r.chosen && i !== q.correctIndex ? ' (your answer)' : (i === r.chosen ? ' (your answer)' : '')) + '</span></li>'; }).join('');
-        return '<article class="gs-rev ' + cls + '" id="gs-rev-' + it.n + '"><div class="gs-qhead"><h3 style="margin:0">Question ' + it.n + '</h3><span class="gs-chip">' + it.part + '</span><span class="gs-chip">' + (r.isCorrect ? it.points + ' of ' + it.points + ' points' : '0 of ' + it.points + ' points') + '</span><span class="gs-chip">Module ' + it.moduleId.slice(1) + '</span><span class="gs-chip">' + r.spent + ' s</span>' + (r.flagged ? '<span class="gs-chip">Flagged</span>' : '') + '</div><div class="gs-qtext">' + q.questionHtml + '</div>' + q.visualHtml + '<ul class="gs-ropts">' + ol + '</ul>' + (r.answered ? '' : '<p><b>You left this blank.</b></p>') + '<details' + (r.isCorrect ? '' : ' open') + '><summary>Step by step solution</summary>' + q.solutionHtml + '<p><b>Answer: ' + esc(q.correctAnswer) + '</b></p></details></article>';
+        return '<article class="gs-rev ' + cls + '" id="gs-rev-' + it.n + '"><div class="gs-qhead"><h3 style="margin:0">Question ' + it.n + '</h3><span class="gs-chip">' + it.part + '</span><span class="gs-chip">' + (r.isCorrect ? it.points + ' of ' + it.points + ' points' : r.credit ? r.credit + ' points for a blank' : '0 of ' + it.points + ' points') + '</span><span class="gs-chip">Module ' + it.moduleId.slice(1) + '</span><span class="gs-chip">' + r.spent + ' s</span>' + (r.flagged ? '<span class="gs-chip">Flagged</span>' : '') + '</div><div class="gs-qtext">' + q.questionHtml + '</div>' + q.visualHtml + '<ul class="gs-ropts">' + ol + '</ul>' + (r.answered ? '' : '<p><b>You left this blank.</b>' + (r.credit ? ' It earned 2 points.' : ' Only the first 10 blanks earn points.') + '</p>') + '<details' + (r.isCorrect ? '' : ' open') + '><summary>Step by step solution</summary>' + q.solutionHtml + '<p><b>Answer: ' + esc(q.correctAnswer) + '</b></p></details></article>';
       }).join('') || '<p class="gs-muted">Nothing in this group.</p>';
       var fb = function (id, label) { return '<button class="gs-btn' + (S.filter === id ? ' gs-on' : '') + '" data-act="filter" data-f="' + id + '">' + label + '</button>'; };
-      return '<div class="gs-root gs-result"><section class="gs-card"><div class="gs-heroscore"><div class="gs-ring" style="background:conic-gradient(var(--accent,#2450E0) ' + deg + 'deg,var(--line,#D6CEB8) 0)"><div>' + Math.round(pct) + '%<small>score</small></div></div><div><h1 style="margin-bottom:4px">Contest complete</h1><div class="gs-big">' + R.score + ' <span class="gs-muted" style="font-size:.5em">out of ' + R.max + '</span></div><p style="margin:8px 0">' + R.correct + ' of ' + R.total + ' correct, ' + R.answered + ' answered.</p><p style="margin:0"><b>' + msg + '</b></p>' + (S.notice ? '<p><b>' + esc(S.notice) + '</b></p>' : '') + '</div></div>' +
+      return '<div class="gs-root gs-result"><section class="gs-card"><div class="gs-heroscore"><div class="gs-ring" style="background:conic-gradient(var(--accent,#2450E0) ' + deg + 'deg,var(--line,#D6CEB8) 0)"><div>' + Math.round(pct) + '%<small>score</small></div></div><div><h1 style="margin-bottom:4px">Contest complete</h1><div class="gs-big">' + R.score + ' <span class="gs-muted" style="font-size:.5em">out of ' + R.max + '</span></div><p style="margin:8px 0">' + R.correct + ' of ' + R.total + ' correct, ' + R.answered + ' answered.' + (R.blankCredit ? ' This includes ' + R.blankCredit + ' points for blanks.' : '') + '</p><p style="margin:0"><b>' + msg + '</b></p>' + (S.notice ? '<p><b>' + esc(S.notice) + '</b></p>' : '') + '</div></div>' +
         '<div class="gs-row" style="margin-top:14px"><button class="gs-btn gs-primary" data-act="start">Take another contest</button><button class="gs-btn" data-act="exit">Back to dashboard</button></div>' +
         '<p class="gs-muted" style="margin:10px 0 0">' + (S.saved && S.saved.where !== 'none' ? 'Saved to your progress.' : 'Your browser blocked saving, so this score was not stored.') + '</p></section>' +
         '<section class="gs-card"><h2>Score by part</h2><div class="gs-bars">' + partRows + '</div></section>' +
@@ -4442,8 +4538,9 @@ body{margin:0;background:var(--bg)}
       t.items.forEach(function (i) { all[i.n] = i.q.correctIndex; wrong[i.n] = (i.q.correctIndex + 1) % 5; if (i.n % 2) { half[i.n] = i.q.correctIndex; expect += i.points; } });
       need(score(t, all).score === TOTAL_POINTS, 'all correct not 150');
       need(score(t, wrong).score === 0, 'all wrong not 0');
-      need(score(t, {}).answered === 0, 'blank answered');
-      need(score(t, half).score === expect, 'partial mismatch');
+      need(score(t, {}).answered === 0 && score(t, {}).score === 20, 'blank scoring should be 2 points x 10 blanks');
+      need(score(t, all).blankCredit === 0, 'no blanks yet credit');
+      need(score(t, half).score === expect + 20, 'partial mismatch');
       var saved = JSON.parse(JSON.stringify(describe(t))), t2 = rebuildTest(saved);
       need(t2.items.every(function (i, k) { return i.q.questionText === t.items[k].q.questionText && i.q.correctIndex === t.items[k].q.correctIndex; }), 'rebuild differs');
       var res = score(t, half, {}, {}); res.seconds = 1800;
@@ -4459,6 +4556,7 @@ body{margin:0;background:var(--bg)}
     listAttempts: function (appState) { appState = appState || root.AppState; return appState && appState.data && appState.data.gauss ? appState.data.gauss.slice() : []; },
     hasSavedSession: function () { return !!loadSession(); }, clearSession: clearSession,
     PARTS: PARTS, CONTEST_SECONDS: CONTEST_SECONDS, TOTAL_QUESTIONS: TOTAL_QUESTIONS, TOTAL_POINTS: TOTAL_POINTS,
+    calcEval: calcEval, calcFmt: calcFmt, injectCss: injectGsCss,
     selfTest: selfTest
   };
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -4591,6 +4689,7 @@ body{margin:0;background:var(--bg)}
 
   /* ---------- shell: theme, sidebar footer, nav pill ---------- */
   function renderChrome() {
+    renderCalc();
     $('#em').classList.toggle('dark', !!D.dark); document.documentElement.classList.toggle('dark', !!D.dark);
     var b = $('#em-theme'); b.textContent = D.dark ? 'Light mode' : 'Dark mode'; b.setAttribute('aria-pressed', String(!!D.dark));
     var xp = D.points % 100;
@@ -4681,7 +4780,7 @@ body{margin:0;background:var(--bg)}
   function drawWorksheet() {
     var L = $('#ws-list'); L.hidden = false; var ws = D.worksheet;
     var done = W.res.filter(Boolean).length, right = W.res.filter(function (r) { return r && r.ok; }).length;
-    L.innerHTML = '<div class="em-card em-sticky em-row" style="justify-content:space-between"><b id="ws-score">' + done + ' of ' + W.qs.length + ' checked, ' + right + ' right</b><span class="em-row"><button class="em-btn small" data-act="generate">New worksheet</button></span></div><div class="em-col" style="margin-top:16px;gap:16px">' + W.qs.map(qCard).join('') + '</div><div id="ws-end"></div>';
+    L.innerHTML = '<div class="em-card em-sticky em-row" style="justify-content:space-between"><b id="ws-score">' + done + ' of ' + W.qs.length + ' checked, ' + right + ' right</b><span class="em-row"><button class="em-btn small" data-act="appcalc">Calculator</button><button class="em-btn small" data-act="generate">New worksheet</button></span></div><div class="em-col" style="margin-top:16px;gap:16px">' + W.qs.map(qCard).join('') + '</div><div id="ws-end"></div>';
     W.qs.forEach(function (_, i) { if (W.res[i]) return; });
     endSummary();
   }
@@ -4760,6 +4859,33 @@ body{margin:0;background:var(--bg)}
   }
 
   /* ==================================================================
+     Calculator for Practice: basic, not programmable. Shares its arithmetic with the contest calculator.
+  ================================================================== */
+  var C = { open: false, expr: '', res: '0', ans: 0, done: false };
+  var CALC_KEYS = [['C', 'op'], ['(', 'op'], [')', 'op'], ['back', 'op', '⌫'], ['7'], ['8'], ['9'], ['÷', 'op'], ['4'], ['5'], ['6'], ['×', 'op'], ['1'], ['2'], ['3'], ['−', 'op'], ['0'], ['.'], ['A', 'op', 'ANS'], ['+', 'op'], ['√', 'op'], ['²', 'op', 'x²'], ['^', 'op', 'xʸ'], ['=', 'eq']];
+  var CALC_LABEL = { back: 'Backspace', C: 'Clear', A: 'Previous answer', '²': 'Square', '^': 'Power', '√': 'Square root' };
+  function calcShow() { var e = $('#em-calc-expr'), r = $('#em-calc-res'); if (e) e.textContent = C.expr || '\u00A0'; if (r) r.textContent = C.res; }
+  function calcPress(k) {
+    if (k === 'C') { C.expr = ''; C.res = '0'; C.done = false; }
+    else if (k === 'back') { if (C.done) { C.expr = ''; C.res = '0'; C.done = false; } else C.expr = C.expr.slice(0, -1); }
+    else if (k === '=') { if (!C.expr) return; try { var v = G.calcEval(C.expr, C.ans); C.res = G.calcFmt(v); C.ans = v; C.done = true; } catch (x) { C.res = 'Error'; C.done = true; } }
+    else {
+      if (C.done) { C.expr = (/^[+\-×÷^²]$/.test(k) && C.res !== 'Error') ? 'A' : ''; C.done = false; C.res = '0'; }
+      C.expr += k; try { C.res = C.expr ? G.calcFmt(G.calcEval(C.expr, C.ans)) : '0'; } catch (x) { /* unfinished expression, keep the last result */ }
+    }
+    calcShow();
+  }
+  function renderCalc() {
+    var box = $('#em-calc'), on = route.view === 'practice';
+    if (!on) { box.innerHTML = ''; return; }
+    if (!C.open) { box.innerHTML = '<button class="em-btn primary em-fab" data-act="appcalc" aria-label="Open calculator">Calculator</button>'; return; }
+    box.innerHTML = '<div class="gs-calc" role="dialog" aria-label="Calculator"><div class="gs-calchead"><span>Calculator</span><button class="gs-btn gs-small" data-act="appcalc">Close</button></div>' +
+      '<div class="gs-calcscreen" aria-live="polite"><div class="gs-calcexpr" id="em-calc-expr">' + esc(C.expr || '\u00A0') + '</div><div class="gs-calcres" id="em-calc-res">' + esc(C.res) + '</div></div>' +
+      '<div class="gs-calckeys">' + CALC_KEYS.map(function (k) { return '<button class="' + (k[1] || '') + '" data-calc="' + esc(k[0]) + '" aria-label="' + esc(CALC_LABEL[k[0]] || k[0]) + '">' + esc(k[2] || k[0]) + '</button>'; }).join('') + '</div>' +
+      '<p class="gs-muted" style="margin:8px 0 0;font-size:.8em;color:var(--muted)">Basic calculator. Type on the keyboard or tap the keys.</p></div>';
+  }
+
+  /* ==================================================================
      Feedback panel: rating, type, message. Saved in progress, and can open a prefilled GitHub issue.
   ================================================================== */
   var FB = { type: 'Idea', rating: 0, ctx: '' };
@@ -4784,6 +4910,7 @@ body{margin:0;background:var(--bg)}
   ================================================================== */
   function onClick(e) {
     var cm = e.target.closest('a[data-mod]'); if (cm) learnSel = cm.dataset.mod;
+    var ck = e.target.closest('[data-calc]'); if (ck && ck.closest('#em-calc')) { calcPress(ck.getAttribute('data-calc')); return; }
     var el = e.target.closest('[data-act]'); if (!el) { if (e.target === $('#em-fb')) $('#em-fb').hidden = true; return; }
     var a = el.dataset.act, m = el.dataset.m, t = el.dataset.t, i = +el.dataset.i, ws = D.worksheet;
     if (el.closest('.gs-root')) return; // the simulator handles its own buttons
@@ -4808,6 +4935,7 @@ body{margin:0;background:var(--bg)}
       case 'cancelreset': $('#em-reset').innerHTML = '<button class="em-btn" data-act="askreset">Reset all progress</button>'; break;
       case 'doreset': AppState.reset(); persist(); try { window.localStorage.removeItem('enrichedMath8.gaussSession.v1'); } catch (x) { /* ignore */ } W.qs = []; D = AppState.data; go('dashboard'); onRoute(); toast('Progress reset.'); break;
       case 'export': { var url = URL.createObjectURL(new Blob([AppState.exportJson()], { type: 'application/json' })), dl = document.createElement('a'); dl.href = url; dl.download = 'enriched-math8-progress.json'; document.body.appendChild(dl); dl.click(); dl.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 500); break; }
+      case 'appcalc': C.open = !C.open; renderCalc(); break;
       case 'feedback': openFeedback(); break;
       case 'report': openFeedback(el.dataset.ctx); break;
       case 'star': FB.rating = +el.dataset.n; var tx = fbText(); drawFeedback(tx); $('#fb-text').value = tx; break;
@@ -4820,6 +4948,7 @@ body{margin:0;background:var(--bg)}
 
   function init() {
     $('#em-nav').innerHTML = NAV.map(function (n) { return '<a id="nav-' + n.id + '" data-v="' + n.id + '" href="#/' + n.id + '"><span class="em-glyph" aria-hidden="true">' + n.glyph + '</span><span class="em-full">' + n.label + '</span><span class="em-short">' + n.short + '</span></a>'; }).join('');
+    if (G && G.injectCss) G.injectCss();
     document.addEventListener('click', onClick);
     $('#em-theme').addEventListener('click', function () { AppState.toggleDark(); persist(); renderChrome(); });
     $('#em-feedback').addEventListener('click', function () { openFeedback(); });
@@ -4831,7 +4960,13 @@ body{margin:0;background:var(--bg)}
       if (e.target.id === 'em-import' && e.target.files[0]) { var rd = new FileReader(); rd.onload = function () { try { AppState.importJson(rd.result); persist(); D = AppState.data; renderProgress(); renderChrome(); toast('Backup restored.'); } catch (x) { toast('That file is not a valid backup.'); } }; rd.readAsText(e.target.files[0]); }
     });
     document.addEventListener('toggle', function (e) { if (e.target.matches && e.target.matches('details.em-det') && e.target.open) initPad(e.target.querySelector('canvas')); }, true);
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('#em-fb').hidden) $('#em-fb').hidden = true; if (e.key === 'Enter' && e.target.id && e.target.id.indexOf('ans-') === 0) check(+e.target.id.slice(4)); });
+    document.addEventListener('keydown', function (e) {
+      if (C.open && route.view === 'practice' && !/INPUT|TEXTAREA|SELECT/.test((e.target && e.target.tagName) || '') && !(e.ctrlKey || e.metaKey || e.altKey)) {
+        var map = { '*': '×', '/': '÷', '-': '−' }, ck = null, k = e.key;
+        if (/^[0-9.+()^]$/.test(k)) ck = k; else if (map[k]) ck = map[k]; else if (k === 'Backspace') ck = 'back'; else if ((k === '=' || k === 'Enter') && (e.target.tagName !== 'BUTTON')) ck = '=';
+        if (ck) { calcPress(ck); e.preventDefault(); return; }
+      }
+      if (e.key === 'Escape' && !$('#em-fb').hidden) $('#em-fb').hidden = true; if (e.key === 'Enter' && e.target.id && e.target.id.indexOf('ans-') === 0) check(+e.target.id.slice(4)); });
     // The simulator listens for A to E and arrow keys on the whole page. Mute those keys on other tabs.
     window.addEventListener('keydown', function (e) { if (route.view !== 'gauss' && !/INPUT|TEXTAREA/.test((e.target && e.target.tagName) || '') && /^[a-fA-F]$|^Arrow/.test(e.key) && !(e.ctrlKey || e.metaKey)) e.stopImmediatePropagation(); }, true);
     window.addEventListener('hashchange', onRoute);

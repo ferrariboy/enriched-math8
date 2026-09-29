@@ -99,6 +99,16 @@
       return fig(svg(x0 + w + 60, y0 + 30, 'Right triangle', g));
     };
 
+    // Cylinder with radius and height labels.
+    V.cylinder = function (rad, h) {
+      var s = 90 / Math.max(rad * 2, h), rx = rad * s, ry = Math.max(8, rx * 0.32), H = h * s, cx = rx + 40, top = ry + 10, bot = top + H;
+      var g = '<path class="me-fb" d="M' + (cx - rx) + ',' + top + ' L' + (cx - rx) + ',' + bot + ' A' + rx + ',' + ry + ' 0 0 0 ' + (cx + rx) + ',' + bot + ' L' + (cx + rx) + ',' + top + ' Z"/>' +
+        '<ellipse class="me-fa" cx="' + cx + '" cy="' + top + '" rx="' + rx + '" ry="' + ry + '"/>' +
+        '<line class="me-ln me-ds" x1="' + cx + '" y1="' + top + '" x2="' + (cx + rx) + '" y2="' + top + '"/>' +
+        tx(cx + rx / 2, top - 5, 'r = ' + rad, 'me-tx me-sm') + tx(cx + rx + 12, top + H / 2 + ry / 2, 'h = ' + h, 'me-tx me-sm', 'start');
+      return fig(svg(cx + rx + 90, bot + ry + 12, 'Cylinder with radius ' + rad + ' and height ' + h, g));
+    };
+
     // Isometric box with optional space diagonal.
     V.box3d = function (l, w, h, diag) {
       var s = 95 / Math.max(l, w, h), c30 = 0.866, ox = 12 + w * s * c30, oy = 12 + h * s;
@@ -597,6 +607,52 @@
     var l = r.int(2, 9), w = r.int(2, 9), h = r.int(2, 9), A = l * w, B = w * h, Cc = l * h, v = l * w * h;
     return I('A rectangular box has faces with areas ' + A + ' cm^{2}, ' + B + ' cm^{2} and ' + Cc + ' cm^{2} (one from each of the three different kinds of face). What is the volume of the box, in cm^{3}?', [
       'Call the edges l, w, h. Then lw = ' + A + ', wh = ' + B + ' and lh = ' + Cc + '.', 'Multiply all three: (lw)(wh)(lh) = (lwh)^{2} = ' + A + ' × ' + B + ' × ' + Cc + ' = ' + A * B * Cc + '.', 'So lwh = √{' + A * B * Cc + '} = ' + v + ' cm^{3}.', 'No need to find the individual edges.'], v, { check: Math.sqrt(A * B * Cc) });
+  });
+
+  // ---------- m4t2 additions: cylinders and prisms (BC Grade 8 surface area and volume) ----------
+  M4[2][1].push(function (r) { // volume of a cylinder
+    var rr = r.int(2, 9), h = r.int(3, 12), V0 = rr * rr * h;
+    return PI('A cylinder has a radius of ' + rr + ' cm and a height of ' + h + ' cm. What is its volume, in cm^{3}? Leave π in your answer.', [
+      'Volume of a cylinder = base area × height = π r^{2} h.', 'π × ' + rr + '^{2} × ' + h + ' = π × ' + rr * rr + ' × ' + h + ' = ' + V0 + 'π cm^{3}.'], 0, V0,
+      [[0, 2 * rr * h], [0, rr * h], [0, 2 * rr * rr * h], [0, rr * rr]], { visual: V.cylinder(rr, h) });
+  });
+  M4[2][1].push(function (r) { // curved surface area, diameter given
+    var rr = r.int(2, 9), h = r.int(3, 12), d = 2 * rr, k = d * h;
+    return PI('A can has a diameter of ' + d + ' cm and a height of ' + h + ' cm. A label wraps once around the curved side with no overlap and no gaps. What is the area of the label, in cm^{2}? Leave π in your answer.', [
+      'Unroll the label. It is a rectangle as tall as the can and as wide as the distance around the can.', 'Distance around = circumference = π × diameter = ' + d + 'π.', 'Area = ' + d + 'π × ' + h + ' = ' + k + 'π cm^{2}.'], 0, k,
+      [[0, rr * h], [0, 2 * k], [0, rr * rr * h], [0, rr * (2 * rr + h)]], { visual: V.cylinder(rr, h) });
+  });
+  M4[2][1].push(function (r) { // total surface area of a closed cylinder
+    var rr = r.int(2, 7), h = r.int(2, 10), k = 2 * rr * rr + 2 * rr * h;
+    return PI('A closed cylinder has radius ' + rr + ' cm and height ' + h + ' cm. What is its total surface area, in cm^{2}? Leave π in your answer.', [
+      'Two circular ends: 2 × π × ' + rr + '^{2} = ' + 2 * rr * rr + 'π.', 'Curved side: 2π × ' + rr + ' × ' + h + ' = ' + 2 * rr * h + 'π.', 'Total = ' + 2 * rr * rr + 'π + ' + 2 * rr * h + 'π = ' + k + 'π cm^{2}.'], 0, k,
+      [[0, rr * rr + 2 * rr * h], [0, 2 * rr * h], [0, rr * rr * h], [0, 2 * rr * rr]], { visual: V.cylinder(rr, h) });
+  });
+  M4[2][1].push(function (r) { // triangular prism volume
+    var b = r.int(3, 12), t = r.int(2, 9) * 2, L = r.int(4, 15), V0 = b * t / 2 * L;
+    return I('A triangular prism has a triangular base with base ' + b + ' cm and height ' + t + ' cm. The prism is ' + L + ' cm long. What is its volume, in cm^{3}?', [
+      'Volume of any prism = area of the base × length.', 'Triangle area = {{1|2}} × ' + b + ' × ' + t + ' = ' + b * t / 2 + '.', 'Volume = ' + b * t / 2 + ' × ' + L + ' = ' + V0 + ' cm^{3}.'], V0, { check: V0 });
+  });
+  M4[2][2].push(function (r) { // pour between cylinders
+    var R = r.int(2, 5), m = r.int(2, 4), rr = R * m, h = r.int(2, 6) * 2, ans = m * m * h;
+    return I('A cylinder with radius ' + rr + ' cm is filled with water to a height of ' + h + ' cm. All of the water is poured into an empty cylinder with radius ' + R + ' cm. How high does the water reach in the second cylinder, in cm?', [
+      'The volume of water stays the same.', 'First cylinder: π × ' + rr + '^{2} × ' + h + ' = ' + rr * rr * h + 'π.', 'Second cylinder with height x: π × ' + R + '^{2} × x = ' + R * R + 'πx.', rr * rr * h + 'π = ' + R * R + 'πx, so x = ' + rr * rr * h + ' ÷ ' + R * R + ' = ' + ans + ' cm.', 'Shortcut: the radius is ' + m + ' times smaller, so the base is ' + m * m + ' times smaller and the water is ' + m * m + ' times higher.'], ans, { check: ans, visual: V.cylinder(rr, h) });
+  });
+  M4[2][2].push(function (r) { // percent change of cylinder volume when radius grows
+    var p = r.pick([[10, 21], [20, 44], [30, 69], [50, 125], [100, 300]]), f = (100 + p[0]) / 100;
+    return I('The radius of a cylinder is increased by ' + p[0] + '% and the height stays the same. By what percent does the volume increase?', [
+      'Volume = π r^{2} h. The radius is multiplied by ' + fmt(f) + ', so r^{2} is multiplied by ' + fmt(f) + ' × ' + fmt(f) + ' = ' + fmt(f * f) + '.', 'The volume is ' + fmt(f * f) + ' times as big, an increase of ' + p[1] + '%.', 'Watch out: the increase is not ' + p[0] + '%. Radius counts twice in the formula.'], p[1], { check: p[1] });
+  });
+  M4[2][2].push(function (r) { // cylinder with equal height and diameter: volume to radius
+    var rr = r.int(2, 8), Vk = 2 * rr * rr * rr;
+    return I('A cylinder has a height equal to its diameter. Its volume is ' + Vk + 'π cm^{3}. What is its radius, in cm?', [
+      'Height = diameter = 2r, so the volume is π r^{2} × 2r = 2π r^{3}.', '2π r^{3} = ' + Vk + 'π, so r^{3} = ' + Vk / 2 + '.', rr + ' × ' + rr + ' × ' + rr + ' = ' + rr * rr * rr + ', so r = ' + rr + ' cm.'], rr, { check: rr });
+  });
+  M4[2][3].push(function (r) { // roll a sheet of paper two ways
+    var pr = r.pick([[3, 2], [4, 3], [5, 2], [5, 3], [5, 4], [7, 4], [7, 5], [8, 5], [9, 4]]), s = r.int(1, 3), a = pr[0] * s, b = pr[1] * s;
+    var ans = pr[0] + ' : ' + pr[1], opts = [ans, pr[1] + ' : ' + pr[0], pr[0] * pr[0] + ' : ' + pr[1] * pr[1], pr[1] * pr[1] + ' : ' + pr[0] * pr[0], '1 : 1'];
+    return { q: 'A rectangular sheet of paper measures ' + a + ' cm by ' + b + ' cm. Rolled one way, with the ' + a + ' cm edges joined, it makes a tube. Rolled the other way, with the ' + b + ' cm edges joined, it makes a different tube. The joined edges just meet with no overlap. What is the ratio of the larger tube volume to the smaller tube volume?', kind: 'text', ans: ans, options: opts, check: ans, shuffle: true,
+      steps: ['Rolling so the edge of length c goes around the tube makes the circumference c, so the radius is c ÷ 2π. The other side is the height.', 'Volume = π r^{2} h = π × (c ÷ 2π)^{2} × h = c^{2} h ÷ 4π.', 'The ' + a + ' cm edge around: ' + a + '^{2} × ' + b + ' ÷ 4π = ' + a * a * b + ' ÷ 4π. The ' + b + ' cm edge around: ' + b + '^{2} × ' + a + ' ÷ 4π = ' + b * b * a + ' ÷ 4π.', 'Ratio = ' + a * a * b + ' : ' + b * b * a + ' = ' + ans + '.', 'Shortcut: the ratio is just (long edge) : (short edge). The long edge as circumference gives the fatter tube.'] };
   });
 
   // ---------- m4t3: angles, parallel lines and polygons ----------
@@ -1214,7 +1270,7 @@
   var L = {
     m4t0: '## Pythagoras and the right triangle\nIn a right triangle the two **legs** meet at the right angle. The side opposite it is the **hypotenuse**, always the longest. The rule is a^{2} + b^{2} = c^{2}.\n:::visual rightTriangle 3 4 5 3 4\nLearn the triples 3, 4, 5 and 5, 12, 13 and 8, 15, 17 and 7, 24, 25. Any multiple of a triple is a triple too, so 9, 12, 15 works.\nWhen a figure looks complicated, hunt for right angles and split it into right triangles. Use the shared side as a bridge from one triangle to the next.\n> Area two ways: the altitude to the hypotenuse is (leg × leg) ÷ hypotenuse.\n### Worked example\n:::worked m4t0 2',
     m4t1: '## Solids, surface area and space diagonals\n**Surface area** is the total area of all the faces. For any prism: SA = 2 × (base area) + (base perimeter) × height.\n:::visual box3d 3 4 12 1\nThe **space diagonal** of a box joins opposite corners through the inside. Use Pythagoras twice, or jump straight to D^{2} = l^{2} + w^{2} + h^{2}. This box has D^{2} = 9 + 16 + 144 = 169, so D = 13.\nFor painted cube puzzles, remove one layer from every side to find the unpainted core. Corners have 3 painted faces, edges 2, face centres 1.\n> An ant on the outside of a box takes the shortest route by unfolding two faces flat and drawing a straight line.\n### Worked example\n:::worked m4t1 3',
-    m4t2: '## Composite shapes and scaling\nSplit a complicated shape into rectangles, triangles and circles, or subtract a cut out piece from a big shape. A notch cut out of a corner never changes the perimeter.\n:::visual shaded ring\nWhen every length is multiplied by k: lengths scale by **k**, areas by **k^{2}**, and volumes by **k^{3}**. Doubling the sides of a square makes the area 4 times as big. Doubling the edges of a cube makes the volume 8 times as big.\nPercent changes behave the same way. Sides 20% longer means area 1.2 × 1.2 = 1.44 times, an increase of 44%.\n> Always decide first: is the quantity a length, an area or a volume?\n### Worked example\n:::worked m4t2 2',
+    m4t2: '## Composite shapes and scaling\nSplit a complicated shape into rectangles, triangles and circles, or subtract a cut out piece from a big shape. A notch cut out of a corner never changes the perimeter.\n:::visual shaded ring\nWhen every length is multiplied by k: lengths scale by **k**, areas by **k^{2}**, and volumes by **k^{3}**. Doubling the sides of a square makes the area 4 times as big. Doubling the edges of a cube makes the volume 8 times as big.\nPercent changes behave the same way. Sides 20% longer means area 1.2 × 1.2 = 1.44 times, an increase of 44%.\n> Always decide first: is the quantity a length, an area or a volume?\n### Cylinders and prisms\nFor any prism or cylinder, **volume = base area × height**. A cylinder has a circular base, so V = π r^{2} h.\n:::visual cylinder 3 8\nThe curved side unrolls into a rectangle as wide as the circumference. Its area is 2π r h. Add two circles for the closed surface: 2π r^{2} + 2π r h.\n### Worked example\n:::worked m4t2 2',
     m4t3: '## Angles, parallel lines and polygons\nAngles on a straight line add to 180°. Angles around a point add to 360°. Angles in a triangle add to 180°.\n:::visual parallelTransversal 4 65° 6 ?\nHere the marked angles are alternate angles, so they are equal. When a line crosses two **parallel** lines: corresponding angles are equal, alternate angles are equal, and co-interior angles add to 180°. Acute angles match acute angles.\n:::visual bentLine 40 35 ?\nA bend between two parallel lines equals the sum of the two outer angles. Draw a helper line through the bend parallel to the others.\nFor a polygon with n sides the interior angles add to (n ' + MINUS + ' 2) × 180°. Exterior angles of any polygon add to 360°, so a regular polygon has exterior angles of 360° ÷ n.\n:::visual polygonAngles 6\n### Worked example\n:::worked m4t3 2',
     m4t4: '## Shaded areas\nShaded area problems are mostly **subtraction**: whole shape minus the pieces you do not want. Or **addition**: shaded pieces that add up to a simple shape.\n:::visual shaded inscribed\nA circle inside a square touching all four sides has radius half the side, so the shaded corners have area s^{2} ' + MINUS + ' π(s/2)^{2}.\n:::visual shaded lens\nFor an overlap, add the two pieces then subtract the whole. That is the lens trick: two quarter circles minus the square.\nLook for symmetry, pieces you can slide to a new place, and shapes that cancel. Leave π in the answer.\n> Joining the midpoints of any quadrilateral shape that is a rectangle or square gives a shape of exactly half the area.\n### Worked example\n:::worked m4t4 2',
     m5t0: '## Mean, median and mode\nThe **mean** is the total divided by the count. The **median** is the middle value of the sorted list. The **mode** is the most common value.\n:::visual barChart 3 5 4 6 2\nTurn means into totals. If a mean of 80 over 5 tests changes to 82 over 6 tests, the totals go from 400 to 492, so the new test was 92.\nFor two groups, use a weighted mean: total of everyone divided by the number of everyone. The class mean sits closer to the bigger group.\nAdding a constant shifts the mean and median but not the range. Multiplying changes all three.\n> A moving average slides a window along the data to smooth out spikes.\n### Worked example\n:::worked m5t0 2',
@@ -1227,12 +1283,23 @@
   /* ==================================================================
      REGISTRATION
   ================================================================== */
+  // Answers with pi (and any spec flagged shuffle) carry their own option list. Shuffle it so the right answer is not always last.
+  [M4, M5].forEach(function (mod) {
+    mod.forEach(function (tiers) {
+      [1, 2, 3].forEach(function (t) {
+        tiers[t] = tiers[t].map(function (g) {
+          return function (r) { var sp = g(r); if (sp.options && (sp.shuffle || /π/.test(sp.ans))) sp.options = r.shuffle(sp.options.slice()); return sp; };
+        });
+      });
+    });
+  });
+
   E.registerModule({
     id: 'm4', title: 'Spatial Sense, Geometry & Measurement',
     topics: [
       { id: 'm4t0', title: 'Pythagorean theorem in multi triangle figures', gens: M4[0], lesson: L.m4t0, summary: 'Hypotenuse and legs, ladders, distance, chains of triangles, altitudes, incircles and trapezoids.' },
       { id: 'm4t1', title: 'Space diagonals, surface area and 3D solids', gens: M4[1], lesson: L.m4t1, summary: 'Prism surface area, space diagonals, 3D distance, painted cubes, unfolding routes and tunnels.' },
-      { id: 'm4t2', title: 'Composite shapes and scaling laws', gens: M4[2], lesson: L.m4t2, summary: 'L shapes, semicircles, rings, and the k, k squared and k cubed scaling laws.' },
+      { id: 'm4t2', title: 'Composite shapes and scaling laws', gens: M4[2], lesson: L.m4t2, summary: 'Cylinders and prisms, L shapes, semicircles, rings, and the k, k squared and k cubed scaling laws.' },
       { id: 'm4t3', title: 'Parallel lines and polygon angles', gens: M4[3], lesson: L.m4t3, summary: 'Transversals, bent lines, interior and exterior angles, isosceles chasing and bisectors.' },
       { id: 'm4t4', title: 'Shaded areas inside squares and circles', gens: M4[4], lesson: L.m4t4, summary: 'Circles in squares, lenses, rings, chords, lunes and midpoint squares, with exact answers in π.' }
     ]

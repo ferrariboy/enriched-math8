@@ -861,25 +861,40 @@
   ================================================================ */
   var lastVariant = {};
 
+  // Picks 4 wrong answers so the right answer lands on a random rank (A to E) once the options are sorted.
+  // Wrong answers written by the question author come first, generic ones fill the gaps.
+  function chooseWrong(pool, spec, r) {
+    if (spec.kind === 'text') return r.shuffle(pool).slice(0, 4);
+    var av = parseAnswer(spec.ans), items = pool.map(function (s, k) { return { s: s, v: parseAnswer(s), k: k }; }).filter(function (x) { return isFinite(x.v) && x.v !== av; });
+    var below = items.filter(function (x) { return x.v < av; }), above = items.filter(function (x) { return x.v > av; }), ranks = [];
+    for (var p = 0; p <= 4; p++) if (p <= below.length && 4 - p <= above.length) ranks.push(p);
+    if (!ranks.length || !isFinite(av)) return r.shuffle(pool).slice(0, 4);
+    var rank = r.pick(ranks);
+    function take(list, n) { return r.shuffle(list).sort(function (x, y) { return (x.k < 6 ? 0 : 1) - (y.k < 6 ? 0 : 1); }).slice(0, n).map(function (x) { return x.s; }); }
+    return take(below, rank).concat(take(above, 4 - rank));
+  }
+
   function makeOptions(spec, r) {
     if (spec.options) return finalize(spec.options.slice(), spec, r, true);
     var list = [], seen = {}; seen[spec.ans] = 1;
     function add(str) { if (str != null && !seen[str] && str !== '') { seen[str] = 1; list.push(str); } }
     function conv(w) { return typeof w === 'number' ? fmt(w) : (w && typeof w === 'object' && 'd' in w) ? fstr(w) : w; }
     var i;
-    if (spec.wrong) r.shuffle(spec.wrong).forEach(function (w) { add(conv(w)); });
+    if (spec.wrong) spec.wrong.forEach(function (w) { add(conv(w)); });
     if (spec.kind === 'int') {
-      var v = spec.value, span = Math.max(3, Math.round(Math.abs(v) * 0.2)), fixed = [1, -1, 2, -2, 10, -10];
-      if (list.length < 4) for (i = 0; i < fixed.length && list.length < 4; i++) { var c = v + fixed[i]; if (v >= 0 && c < 0) continue; add(fmt(c)); }
-      for (i = 0; list.length < 4 && i < 200; i++) { var c2 = v + r.int(-span, span); if (v >= 0 && c2 < 0) continue; add(fmt(c2)); }
+      var v = spec.value, span = Math.max(3, Math.round(Math.abs(v) * 0.15)), cand = [1, -1, 2, -2, 3, -3, 5, -5, 10, -10, span, -span, 2 * span, -2 * span].map(function (d) { return v + d; });
+      if (Number.isInteger(v) && Math.abs(v) >= 4) { cand.push(v * 2); if (v % 2 === 0) cand.push(v / 2); }
+      if (Number.isInteger(v) && v >= 10) { var rev = parseInt(String(v).split('').reverse().join(''), 10); cand.push(rev); cand.push(v + 100, v - 100); }
+      cand.forEach(function (c) { if (!Number.isInteger(c) && Number.isInteger(v)) return; if (v >= 0 && c < 0) return; add(fmt(c)); });
+      for (i = 0; list.length < 12 && i < 200; i++) { var c2 = v + r.int(-span - 5, span + 5); if (v >= 0 && c2 < 0) continue; add(fmt(c2)); }
       if (list.length < 4) for (i = 1; list.length < 4; i++) add(fmt(v + 20 + i));
     } else if (spec.kind === 'frac') {
-      var f = spec.value, n = f.n, d = f.d, cand = [F(n + 1, d), F(n, d + 1), F(n - 1, d), F(n + 1, d + 1), F(n + d, d + 1), F(n * 2, d + 1)];
-      if (n !== 0) cand.push(F(d, n));
-      cand.forEach(function (x) { if (x.d !== 0) add(fstr(x)); });
+      var f = spec.value, n = f.n, d = f.d, cand2 = [F(n + 1, d), F(n, d + 1), F(n - 1, d), F(n + 1, d + 1), F(n + d, d + 1), F(n * 2, d + 1)];
+      if (n !== 0) cand2.push(F(d, n));
+      cand2.forEach(function (x) { if (x.d !== 0) add(fstr(x)); });
       for (i = 0; list.length < 4 && i < 200; i++) add(fstr(F(r.int(1, 12), r.int(2, 12))));
     }
-    return finalize(r.shuffle(list).slice(0, 4).concat([spec.ans]), spec, r, false);
+    return finalize(chooseWrong(list, spec, r).concat([spec.ans]), spec, r, false);
   }
   function finalize(opts, spec, r, keepOrder) {
     if (keepOrder) return opts;

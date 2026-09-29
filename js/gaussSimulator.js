@@ -551,7 +551,11 @@
     var finals = {}, seen2 = {}; (function all(a) { var key = a.join(','); if (seen2[key]) return; seen2[key] = true; if (a.length === 1) { finals[a[0]] = true; return; } for (var i = 0; i < a.length; i++) for (var j = i + 1; j < a.length; j++) { var b = a.filter(function (_, k) { return k !== i && k !== j; }); b.push(Math.abs(a[i] - a[j])); b.sort(function (x, y) { return x - y; }); all(b); } })(start);
     var mn = Math.min.apply(null, Object.keys(finals).map(Number));
     if (found === null) return M6[3][3][0](r);
-    return I('The whole numbers from 1 to ' + N + ' are written on a board. A move erases any two numbers and writes down their difference (the larger minus the smaller). After ' + (N - 1) + ' moves one number is left. What is the smallest number that can be left?', ['Look at parity. If you erase a and b and write |a ' + MINUS + ' b|, the sum of all numbers changes by ' + MINUS + '(a + b) + |a ' + MINUS + ' b|, and a + b and |a ' + MINUS + ' b| always have the same parity. So the parity of the total never changes.', 'The starting total is ' + N + '(' + (N + 1) + ') ÷ 2 = ' + S + ', which is ' + (S % 2 ? 'odd' : 'even') + '. So the last number is ' + (S % 2 ? 'odd, and cannot be 0. The smallest it could be is 1.' : 'even, so it could be 0.'), 'It can be reached. One sequence of moves: ' + found.map(function (o) { return '(' + o[0] + ', ' + o[1] + ') gives ' + o[2]; }).join('; ') + '.', 'The smallest possible final number is ' + target + '.'], target, { check: mn });
+    var reach = Object.keys(finals).map(Number).filter(function (v) { return v <= N; }), good = r.pick(reach), bad = [];
+    for (var w = 0; w <= N + 8; w++) if (w % 2 !== S % 2) bad.push(w);
+    var wrongs = r.shuffle(bad).slice(0, 4), opts = r.shuffle([String(good)].concat(wrongs.map(String)));
+    return { q: tidy('The whole numbers from 1 to ' + N + ' are written on a board. A move erases any two numbers and writes down their difference (the larger minus the smaller). After ' + (N - 1) + ' moves one number is left. Which of these could be the number left?'), kind: 'text', ans: String(good), options: opts, check: String(good), shuffle: true,
+      steps: tidyAll(['Look at parity. If you erase a and b and write |a ' + MINUS + ' b|, the sum of all numbers changes by ' + MINUS + '(a + b) + |a ' + MINUS + ' b|, and a + b and |a ' + MINUS + ' b| always have the same parity. So the parity of the total never changes.', 'The starting total is ' + N + '(' + (N + 1) + ') ÷ 2 = ' + S + ', which is ' + (S % 2 ? 'odd' : 'even') + '. So the last number must be ' + (S % 2 ? 'odd' : 'even') + '.', 'Only ' + good + ' has the right parity, so it is the only one that could be left.']) };
   });
 
   /* ==================================================================
@@ -583,7 +587,7 @@
     { id: 'B', label: 'Part B', blurb: 'Medium', count: 10, tier: 2, points: 6 },
     { id: 'C', label: 'Part C', blurb: 'Hard, non routine', count: 5, tier: 3, points: 8 }
   ];
-  var TOTAL_QUESTIONS = 25, TOTAL_POINTS = 150;
+  var TOTAL_QUESTIONS = 25, TOTAL_POINTS = 150, BLANK_POINTS = 2, BLANK_MAX = 10;
   var SESSION_KEY = 'enrichedMath8.gaussSession.v1', APP_KEY = 'enrichedMath8.v1';
 
   function mulberry(seed) { var a = seed >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; var t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -646,15 +650,17 @@
   /* Score a finished contest. answers: { questionNumber: chosenOptionIndex }. spent: seconds per question. flags: { n: true }. */
   function score(test, answers, spent, flags) {
     answers = answers || {}; spent = spent || {}; flags = flags || {};
-    var res = { score: 0, max: test.totalPoints, correct: 0, answered: 0, total: test.items.length, parts: {}, modules: {}, tiers: {}, items: [] };
+    var res = { score: 0, max: test.totalPoints, correct: 0, answered: 0, total: test.items.length, blankCredit: 0, parts: {}, modules: {}, tiers: {}, items: [] };
+    var blanksPaid = 0; // Real Gauss rule: each unanswered question earns 2 points, for at most 10 unanswered questions.
     PARTS.forEach(function (p) { res.parts[p.id] = { label: p.label, blurb: p.blurb, total: 0, correct: 0, answered: 0, points: 0, max: 0, seconds: 0 }; });
     test.items.forEach(function (it) {
       var chosen = answers[it.n], has = chosen !== undefined && chosen !== null, ok = has && chosen === it.q.correctIndex, P = res.parts[it.part];
       var M = res.modules[it.moduleId] = res.modules[it.moduleId] || { total: 0, correct: 0, answered: 0, points: 0, max: 0 };
       P.total++; P.max += it.points; M.total++; M.max += it.points; P.seconds += spent[it.n] || 0;
       if (has) { res.answered++; P.answered++; M.answered++; }
+      var credit = 0; if (!has && blanksPaid < BLANK_MAX) { credit = BLANK_POINTS; blanksPaid++; res.score += credit; res.blankCredit += credit; P.points += credit; M.points += credit; }
       if (ok) { res.correct++; res.score += it.points; P.correct++; P.points += it.points; M.correct++; M.points += it.points; }
-      res.items.push({ n: it.n, part: it.part, points: it.points, moduleId: it.moduleId, topicId: it.topicId, tier: it.tier, chosen: has ? chosen : null, correctIndex: it.q.correctIndex, isCorrect: !!ok, answered: !!has, spent: Math.round(spent[it.n] || 0), flagged: !!flags[it.n] });
+      res.items.push({ n: it.n, part: it.part, points: it.points, moduleId: it.moduleId, topicId: it.topicId, tier: it.tier, chosen: has ? chosen : null, correctIndex: it.q.correctIndex, isCorrect: !!ok, answered: !!has, credit: credit, spent: Math.round(spent[it.n] || 0), flagged: !!flags[it.n] });
     });
     res.percent = res.max ? Math.round(1000 * res.score / res.max) / 10 : 0;
     return res;
@@ -669,7 +675,9 @@
     var A = res.parts.A, B = res.parts.B, C = res.parts.C;
     if (A.correct < A.total * 0.8) tips.push('Part A is where contests are won. You got ' + A.correct + ' of ' + A.total + '. Aim for at least 8 by slowing down and checking each easy question once.');
     if (C.correct === 0 && C.answered > 0) tips.push('Part C had no correct answers. These questions reward a plan: draw a picture, try small cases, or look for a pattern before you calculate.');
-    if (res.answered < res.total) tips.push('You left ' + (res.total - res.answered) + ' question' + (res.total - res.answered === 1 ? '' : 's') + ' unanswered. There is no penalty for a wrong answer, so always make your best guess before time runs out.');
+    var blanks = res.total - res.answered;
+    if (blanks > BLANK_MAX) tips.push('You left ' + blanks + ' questions unanswered. Only the first ' + BLANK_MAX + ' blanks earn ' + BLANK_POINTS + ' points, so blanks beyond that earn nothing. Use your last minutes to answer them.');
+    else if (blanks > 0) tips.push('You left ' + blanks + ' question' + (blanks === 1 ? '' : 's') + ' blank, which earned ' + blanks * BLANK_POINTS + ' points. A wrong answer earns 0, so guess only after you rule out choices: down to 2 choices in Part A or B, down to 3 in Part C.');
     if (res.seconds !== undefined && res.seconds < CONTEST_SECONDS - 600 && res.answered === res.total) tips.push('You finished with ' + Math.round((CONTEST_SECONDS - res.seconds) / 60) + ' minutes to spare. Use spare time to recheck Part B and Part C, especially any flagged questions.');
     var flaggedWrong = res.items.filter(function (i) { return i.flagged && !i.isCorrect; }).length;
     if (flaggedWrong) tips.push(flaggedWrong + ' of your flagged questions were wrong or blank. Flagging was the right instinct, so review those solutions first.');
@@ -709,6 +717,28 @@
   function saveSession(s) { try { root.localStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch (e) { /* storage blocked */ } }
   function loadSession() { try { var raw = root.localStorage.getItem(SESSION_KEY); if (!raw) return null; var s = JSON.parse(raw); return s && s.v === 1 && s.test && s.test.items && s.test.items.length === TOTAL_QUESTIONS ? s : null; } catch (e) { return null; } }
   function clearSession() { try { root.localStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ } }
+
+  /* Calculator arithmetic shared with the app: no eval, so nothing else can run. */
+  function calcEval(str, ans) {
+    var src = str.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-').replace(/\s+/g, ''), i = 0;
+    function peek() { return src.charAt(i); }
+    function num() { var m = /^(\d+\.?\d*|\.\d+)/.exec(src.slice(i)); if (!m) throw 0; i += m[0].length; return parseFloat(m[0]); }
+    function atom() {
+      var c = peek(), v;
+      if (c === '(') { i++; v = expr(); if (peek() === ')') i++; }
+      else if (c === '√') { i++; v = atom(); if (v < 0) throw 0; v = Math.sqrt(v); }
+      else if (c === 'A') { i++; v = ans; }
+      else v = num();
+      while (peek() === '²') { i++; v = v * v; }
+      return v;
+    }
+    function power() { var b = atom(); if (peek() === '^') { i++; return Math.pow(b, unary()); } return b; }
+    function unary() { if (peek() === '-') { i++; return -unary(); } if (peek() === '+') { i++; return unary(); } return power(); }
+    function term() { var v = unary(); for (;;) { var c = peek(); if (c === '*') { i++; v *= unary(); } else if (c === '/') { i++; var d = unary(); if (d === 0) throw 0; v /= d; } else if (c === '(' || c === '√' || c === 'A') { v *= unary(); } else return v; } }
+    function expr() { var v = term(); for (;;) { var c = peek(); if (c === '+') { i++; v += term(); } else if (c === '-') { i++; v -= term(); } else return v; } }
+    var out = expr(); if (i < src.length) { if (src.charAt(i) === ')') { /* ignore stray close bracket */ } else throw 0; } if (!isFinite(out)) throw 0; return out;
+  }
+  function calcFmt(v) { if (Math.abs(v) >= 1e15 || (Math.abs(v) < 1e-9 && v !== 0)) return v.toExponential(6); return String(parseFloat(v.toPrecision(12))); }
 
   /* ==================================================================
      CONTEST SIMULATOR: STYLES
@@ -825,26 +855,7 @@
     var timer = null, toastTimer = null;
 
     /* ---------- built in calculator: basic, not programmable, not graphing (like contest rules) ---------- */
-    function calcEval(str) {
-      var src = str.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-').replace(/\s+/g, ''), i = 0;
-      function peek() { return src.charAt(i); }
-      function num() { var m = /^(\d+\.?\d*|\.\d+)/.exec(src.slice(i)); if (!m) throw 0; i += m[0].length; return parseFloat(m[0]); }
-      function atom() {
-        var c = peek(), v;
-        if (c === '(') { i++; v = expr(); if (peek() === ')') i++; }
-        else if (c === '√') { i++; v = atom(); if (v < 0) throw 0; v = Math.sqrt(v); }
-        else if (c === 'A') { i++; v = S.calc.ans; }
-        else v = num();
-        while (peek() === '²') { i++; v = v * v; }
-        return v;
-      }
-      function power() { var b = atom(); if (peek() === '^') { i++; return Math.pow(b, unary()); } return b; }
-      function unary() { if (peek() === '-') { i++; return -unary(); } if (peek() === '+') { i++; return unary(); } return power(); }
-      function term() { var v = unary(); for (;;) { var c = peek(); if (c === '*') { i++; v *= unary(); } else if (c === '/') { i++; var d = unary(); if (d === 0) throw 0; v /= d; } else if (c === '(' || c === '√' || c === 'A') { v *= unary(); } else return v; } }
-      function expr() { var v = term(); for (;;) { var c = peek(); if (c === '+') { i++; v += term(); } else if (c === '-') { i++; v -= term(); } else return v; } }
-      var out = expr(); if (i < src.length) { if (src.charAt(i) === ')') { /* ignore stray close bracket */ } else throw 0; } if (!isFinite(out)) throw 0; return out;
-    }
-    function calcFmt(v) { if (Math.abs(v) >= 1e15 || (Math.abs(v) < 1e-9 && v !== 0)) return v.toExponential(6); return String(parseFloat(v.toPrecision(12))); }
+    function calcEvalS(str) { return calcEval(str, S.calc.ans); }
     function calcShow() { var e = container.querySelector('#gs-calc-expr'), r = container.querySelector('#gs-calc-res'); if (e) e.textContent = S.calc.expr || '\u00A0'; if (r) r.textContent = S.calc.res; }
     function calcPress(k) {
       var c = S.calc;
@@ -852,11 +863,11 @@
       else if (k === 'back') { if (c.done) { c.expr = ''; c.res = '0'; c.done = false; } else c.expr = c.expr.slice(0, -1); }
       else if (k === '=') {
         if (!c.expr) return;
-        try { var v = calcEval(c.expr); c.res = calcFmt(v); c.ans = v; c.done = true; } catch (x) { c.res = 'Error'; c.done = true; }
+        try { var v = calcEvalS(c.expr); c.res = calcFmt(v); c.ans = v; c.done = true; } catch (x) { c.res = 'Error'; c.done = true; }
       } else {
         if (c.done) { if (/^[+\-×÷^²]$/.test(k) && c.res !== 'Error') c.expr = 'A'; else c.expr = ''; c.done = false; c.res = '0'; }
         c.expr += k;
-        try { c.res = c.expr ? calcFmt(calcEval(c.expr)) : '0'; } catch (x) { /* unfinished expression: keep previous result */ }
+        try { c.res = c.expr ? calcFmt(calcEvalS(c.expr)) : '0'; } catch (x) { /* unfinished expression: keep previous result */ }
       }
       calcShow();
     }
@@ -916,7 +927,7 @@
       var rows = h.slice().reverse().slice(0, 6).map(function (g) { return '<tr><td>' + new Date(g.at).toLocaleDateString() + '</td><td><b>' + g.score + '</b> / ' + g.max + '</td><td>' + (g.correct !== undefined ? g.correct + ' of ' + (g.total || 25) : '') + '</td><td>' + Math.round(g.seconds / 60) + ' min</td></tr>'; }).join('');
       return '<div class="gs-root gs-setup"><section class="gs-card"><h1 class="gs-hero-title">Gauss Contest Simulator</h1><p class="gs-muted">A full length practice contest with fresh questions from all six modules every time.</p>' +
         '<div class="gs-rules"><div class="gs-rule"><b>25</b>questions</div><div class="gs-rule"><b>60 min</b>one countdown clock</div><div class="gs-rule"><b>Part A</b>10 easy questions, 5 points each</div><div class="gs-rule"><b>Part B</b>10 medium questions, 6 points each</div><div class="gs-rule"><b>Part C</b>5 hard non routine questions, 8 points each</div><div class="gs-rule"><b>150</b>points in total</div></div>' +
-        '<ul class="gs-tips"><li>Each question has five choices, A to E. A wrong answer costs nothing, so never leave a blank.</li><li>Flag any question to come back to it. Use the number grid to jump around.</li><li>Your answers are saved as you go. If you close the page, the clock keeps running.</li><li>Solutions appear only after you submit.</li></ul>' +
+        '<ul class="gs-tips"><li>Each question has five choices, A to E. A wrong answer scores 0, but a blank scores 2 points (for up to 10 blanks). Guess only when you can rule out choices, down to 2 in Part A or B and down to 3 in Part C.</li><li>Flag any question to come back to it. Use the number grid to jump around.</li><li>Your answers are saved as you go. If you close the page, the clock keeps running.</li><li>Solutions appear only after you submit.</li></ul>' +
         (S.notice ? '<p><b>' + esc(S.notice) + '</b></p>' : '') +
         '<div class="gs-row" style="margin-top:14px"><button class="gs-btn' + (S.calcOn ? ' gs-on' : '') + '" data-act="calcpref" aria-pressed="' + S.calcOn + '">Calculator: ' + (S.calcOn ? 'on' : 'off') + '</button></div><p class="gs-muted" style="margin:6px 0 0;font-size:.9em">The real Gauss contest allows a basic, non programmable calculator. Turn it off for a no calculator drill.</p><div class="gs-row" style="margin-top:14px"><button class="gs-btn gs-primary" data-act="start" style="font-size:1.15em;min-height:60px">Start the contest</button></div></section>' + resumeCard +
         '<section class="gs-card"><h2>Your history</h2>' + (h.length ? '<p>Best score: <b>' + best + ' / ' + h[0].max + '</b></p><table class="gs-table"><thead><tr><th>Date</th><th>Score</th><th>Correct</th><th>Time</th></tr></thead><tbody>' + rows + '</tbody></table>' : '<p class="gs-muted">No contests yet. Your scores will be saved here.</p>') + '</section></div>';
@@ -949,7 +960,7 @@
     function submitModalHTML() {
       var blank = S.test.items.filter(function (i) { return S.answers[i.n] === undefined; }).map(function (i) { return i.n; }), fl = Object.keys(S.flags).map(Number).sort(function (a, b) { return a - b; });
       return '<div class="gs-overlay" role="dialog" aria-modal="true" aria-labelledby="gs-mt"><div class="gs-modal"><h2 id="gs-mt">Submit your contest?</h2><p>You have answered <b>' + (25 - blank.length) + ' of 25</b> questions and have <b>' + mmss((S.deadline - Date.now()) / 1000) + '</b> left.</p>' +
-        (blank.length ? '<p><b>Not answered:</b> ' + blank.join(', ') + '. There is no penalty for a wrong answer, so it is worth guessing.</p>' : '<p>Every question has an answer.</p>') + (fl.length ? '<p><b>Flagged:</b> ' + fl.join(', ') + '.</p>' : '') +
+        (blank.length ? '<p><b>Not answered:</b> ' + blank.join(', ') + '. Each blank is worth 2 points (up to 10 blanks) and a wrong answer is worth 0, so guess only if you can narrow it down.</p>' : '<p>Every question has an answer.</p>') + (fl.length ? '<p><b>Flagged:</b> ' + fl.join(', ') + '.</p>' : '') +
         '<div class="gs-row"><button class="gs-btn" data-act="cancel">Keep working</button><button class="gs-btn gs-primary" data-act="confirm">Submit and see my score</button></div></div></div>';
     }
 
@@ -965,10 +976,10 @@
       var items = S.test.items.filter(function (it) { var r = R.items[it.n - 1]; return S.filter === 'all' || (S.filter === 'wrong' && r.answered && !r.isCorrect) || (S.filter === 'blank' && !r.answered) || (S.filter === 'flagged' && r.flagged); }).map(function (it) {
         var r = R.items[it.n - 1], q = it.q, cls = r.isCorrect ? 'gs-ok' : r.answered ? 'gs-bad' : 'gs-blank';
         var ol = q.optionsHtml.map(function (o, i) { return '<li class="' + (i === q.correctIndex ? 'gs-good' : (i === r.chosen ? 'gs-wrong' : '')) + '"><b>' + LET[i] + '</b><span>' + o + (i === q.correctIndex ? ' (correct)' : '') + (i === r.chosen && i !== q.correctIndex ? ' (your answer)' : (i === r.chosen ? ' (your answer)' : '')) + '</span></li>'; }).join('');
-        return '<article class="gs-rev ' + cls + '" id="gs-rev-' + it.n + '"><div class="gs-qhead"><h3 style="margin:0">Question ' + it.n + '</h3><span class="gs-chip">' + it.part + '</span><span class="gs-chip">' + (r.isCorrect ? it.points + ' of ' + it.points + ' points' : '0 of ' + it.points + ' points') + '</span><span class="gs-chip">Module ' + it.moduleId.slice(1) + '</span><span class="gs-chip">' + r.spent + ' s</span>' + (r.flagged ? '<span class="gs-chip">Flagged</span>' : '') + '</div><div class="gs-qtext">' + q.questionHtml + '</div>' + q.visualHtml + '<ul class="gs-ropts">' + ol + '</ul>' + (r.answered ? '' : '<p><b>You left this blank.</b></p>') + '<details' + (r.isCorrect ? '' : ' open') + '><summary>Step by step solution</summary>' + q.solutionHtml + '<p><b>Answer: ' + esc(q.correctAnswer) + '</b></p></details></article>';
+        return '<article class="gs-rev ' + cls + '" id="gs-rev-' + it.n + '"><div class="gs-qhead"><h3 style="margin:0">Question ' + it.n + '</h3><span class="gs-chip">' + it.part + '</span><span class="gs-chip">' + (r.isCorrect ? it.points + ' of ' + it.points + ' points' : r.credit ? r.credit + ' points for a blank' : '0 of ' + it.points + ' points') + '</span><span class="gs-chip">Module ' + it.moduleId.slice(1) + '</span><span class="gs-chip">' + r.spent + ' s</span>' + (r.flagged ? '<span class="gs-chip">Flagged</span>' : '') + '</div><div class="gs-qtext">' + q.questionHtml + '</div>' + q.visualHtml + '<ul class="gs-ropts">' + ol + '</ul>' + (r.answered ? '' : '<p><b>You left this blank.</b>' + (r.credit ? ' It earned 2 points.' : ' Only the first 10 blanks earn points.') + '</p>') + '<details' + (r.isCorrect ? '' : ' open') + '><summary>Step by step solution</summary>' + q.solutionHtml + '<p><b>Answer: ' + esc(q.correctAnswer) + '</b></p></details></article>';
       }).join('') || '<p class="gs-muted">Nothing in this group.</p>';
       var fb = function (id, label) { return '<button class="gs-btn' + (S.filter === id ? ' gs-on' : '') + '" data-act="filter" data-f="' + id + '">' + label + '</button>'; };
-      return '<div class="gs-root gs-result"><section class="gs-card"><div class="gs-heroscore"><div class="gs-ring" style="background:conic-gradient(var(--accent,#2450E0) ' + deg + 'deg,var(--line,#D6CEB8) 0)"><div>' + Math.round(pct) + '%<small>score</small></div></div><div><h1 style="margin-bottom:4px">Contest complete</h1><div class="gs-big">' + R.score + ' <span class="gs-muted" style="font-size:.5em">out of ' + R.max + '</span></div><p style="margin:8px 0">' + R.correct + ' of ' + R.total + ' correct, ' + R.answered + ' answered.</p><p style="margin:0"><b>' + msg + '</b></p>' + (S.notice ? '<p><b>' + esc(S.notice) + '</b></p>' : '') + '</div></div>' +
+      return '<div class="gs-root gs-result"><section class="gs-card"><div class="gs-heroscore"><div class="gs-ring" style="background:conic-gradient(var(--accent,#2450E0) ' + deg + 'deg,var(--line,#D6CEB8) 0)"><div>' + Math.round(pct) + '%<small>score</small></div></div><div><h1 style="margin-bottom:4px">Contest complete</h1><div class="gs-big">' + R.score + ' <span class="gs-muted" style="font-size:.5em">out of ' + R.max + '</span></div><p style="margin:8px 0">' + R.correct + ' of ' + R.total + ' correct, ' + R.answered + ' answered.' + (R.blankCredit ? ' This includes ' + R.blankCredit + ' points for blanks.' : '') + '</p><p style="margin:0"><b>' + msg + '</b></p>' + (S.notice ? '<p><b>' + esc(S.notice) + '</b></p>' : '') + '</div></div>' +
         '<div class="gs-row" style="margin-top:14px"><button class="gs-btn gs-primary" data-act="start">Take another contest</button><button class="gs-btn" data-act="exit">Back to dashboard</button></div>' +
         '<p class="gs-muted" style="margin:10px 0 0">' + (S.saved && S.saved.where !== 'none' ? 'Saved to your progress.' : 'Your browser blocked saving, so this score was not stored.') + '</p></section>' +
         '<section class="gs-card"><h2>Score by part</h2><div class="gs-bars">' + partRows + '</div></section>' +
@@ -1061,8 +1072,9 @@
       t.items.forEach(function (i) { all[i.n] = i.q.correctIndex; wrong[i.n] = (i.q.correctIndex + 1) % 5; if (i.n % 2) { half[i.n] = i.q.correctIndex; expect += i.points; } });
       need(score(t, all).score === TOTAL_POINTS, 'all correct not 150');
       need(score(t, wrong).score === 0, 'all wrong not 0');
-      need(score(t, {}).answered === 0, 'blank answered');
-      need(score(t, half).score === expect, 'partial mismatch');
+      need(score(t, {}).answered === 0 && score(t, {}).score === 20, 'blank scoring should be 2 points x 10 blanks');
+      need(score(t, all).blankCredit === 0, 'no blanks yet credit');
+      need(score(t, half).score === expect + 20, 'partial mismatch');
       var saved = JSON.parse(JSON.stringify(describe(t))), t2 = rebuildTest(saved);
       need(t2.items.every(function (i, k) { return i.q.questionText === t.items[k].q.questionText && i.q.correctIndex === t.items[k].q.correctIndex; }), 'rebuild differs');
       var res = score(t, half, {}, {}); res.seconds = 1800;
@@ -1078,6 +1090,7 @@
     listAttempts: function (appState) { appState = appState || root.AppState; return appState && appState.data && appState.data.gauss ? appState.data.gauss.slice() : []; },
     hasSavedSession: function () { return !!loadSession(); }, clearSession: clearSession,
     PARTS: PARTS, CONTEST_SECONDS: CONTEST_SECONDS, TOTAL_QUESTIONS: TOTAL_QUESTIONS, TOTAL_POINTS: TOTAL_POINTS,
+    calcEval: calcEval, calcFmt: calcFmt, injectCss: injectGsCss,
     selfTest: selfTest
   };
 })(typeof window !== 'undefined' ? window : globalThis);
